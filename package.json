@@ -1,0 +1,31 @@
+{
+  "name": "cmd-executor",
+  "version": "0.2.0",
+  "description": "Distributed Command Executor with Worker Nodes (Phase 2)",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "worker": "node worker-agent.js",
+    "quickstart": "node quickstart.js"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.16",
+    "next": "16.1.2",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.2",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

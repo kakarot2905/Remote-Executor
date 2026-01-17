@@ -143,11 +143,9 @@ export class DockerExecutor {
       // Workspace mount (read-write for /workspace only)
       `-v`,
       `${workspaceDir}:/workspace:rw`,
-      // Temporary writable directories for container runtime
-      "-v",
-      `/run:size=10m`,
-      "-v",
-      `/tmp:size=50m`,
+      // Temporary writable directories for container runtime (tmpfs)
+      "--tmpfs=/run:size=10m",
+      "--tmpfs=/tmp:size=50m",
       // Set working directory
       `-w`,
       `/workspace`,

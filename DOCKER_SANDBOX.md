@@ -189,8 +189,8 @@ docker run \
   --memory-swap=-1 \
   --pids-limit=32 \
   -v <workspace>:/workspace:rw \
-  -v /run:size=10m \
-  -v /tmp:size=50m \
+  --tmpfs=/run:size=10m \
+  --tmpfs=/tmp:size=50m \
   -w /workspace \
   <image-name> \
   /bin/sh -c "<command>"

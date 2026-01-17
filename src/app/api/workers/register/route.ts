@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
     if (!workerId || !hostname) {
       return NextResponse.json(
         { error: "workerId and hostname are required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -22,6 +22,7 @@ export async function POST(request: NextRequest) {
       lastHeartbeat: Date.now(),
       version: version || "unknown",
       createdAt: Date.now(),
+      currentJobId: null,
     };
 
     workerRegistry.set(workerId, workerInfo);
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     return NextResponse.json(
       { error: error.message || "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

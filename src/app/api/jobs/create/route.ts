@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
         {
           error: "command, fileUrl, and filename are required",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -33,6 +33,7 @@ export async function POST(request: NextRequest) {
       startedAt: null,
       completedAt: null,
       errorMessage: null,
+      cancelRequested: false,
     };
 
     jobRegistry.set(jobId, job);
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     return NextResponse.json(
       { error: error.message || "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

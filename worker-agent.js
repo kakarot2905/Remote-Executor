@@ -50,7 +50,7 @@ const JOB_POLL_INTERVAL = 5000; // 5 seconds
 const WORK_DIR = join(homedir(), ".cmd-executor-worker");
 
 // Docker execution settings
-const DOCKER_TIMEOUT = parseInt(process.env.DOCKER_TIMEOUT || "30000", 10); // 30 seconds
+const DOCKER_TIMEOUT = parseInt(process.env.DOCKER_TIMEOUT || "300000", 10); // 5 minutes (for long-running tasks)
 const DOCKER_MEMORY_LIMIT = process.env.DOCKER_MEMORY_LIMIT || "512m"; // 512 MB
 const DOCKER_CPU_LIMIT = process.env.DOCKER_CPU_LIMIT || "2.0"; // 2 CPU cores
 const ENABLE_DOCKER = process.env.ENABLE_DOCKER !== "false"; // Enabled by default
@@ -102,9 +102,9 @@ class DockerExecutor {
             "--pids-limit=32", // Max 32 processes
             // ===== WORKSPACE MOUNT =====
             "-v", `${workspaceDir}:/workspace:rw`,
-            // ===== TEMP DIRECTORIES =====
-            "-v", `/run:size=10m`,
-            "-v", `/tmp:size=50m`,
+            // ===== TEMP DIRECTORIES (tmpfs) =====
+            "--tmpfs=/run:size=10m",
+            "--tmpfs=/tmp:size=50m",
             // ===== WORKING DIRECTORY =====
             "-w", `/workspace`,
             // ===== IMAGE & COMMAND =====
@@ -114,17 +114,94 @@ class DockerExecutor {
     }
 
     /**
+     * Detect runtime from command and return appropriate Docker image
+     */
+    getDockerImage(command) {
+        const cmd = (command || "").toLowerCase();
+        if (cmd.includes("python") || cmd.includes("py ")) return "python:3.11-slim";
+        if (cmd.includes("node") || cmd.includes("npm")) return "node:22-alpine";
+        if (cmd.includes("g++") || cmd.includes("gcc")) return "gcc:14-alpine";
+        if (cmd.includes("java") || cmd.includes("javac")) return "eclipse-temurin:21-alpine";
+        if (cmd.includes("dotnet")) return "mcr.microsoft.com/dotnet/runtime:8.0-alpine";
+        return "alpine:latest"; // Default fallback
+    }
+
+    /**
+     * Check if Docker image exists locally
+     */
+    async imageExists(imageName) {
+        try {
+            execSync(`docker image inspect ${imageName}`, { stdio: "pipe" });
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    /**
+     * Pull Docker image if not present
+     */
+    async pullImage(imageName) {
+        return new Promise((resolve, reject) => {
+            log(`Pulling Docker image: ${imageName}... (this may take a few minutes)`, "INFO");
+
+            const child = spawn("docker", ["pull", imageName], {
+                stdio: "inherit",
+            });
+
+            // Timeout for image pull (10 minutes)
+            const timeout = setTimeout(() => {
+                child.kill();
+                reject(new Error(`Image pull timed out after 10 minutes`));
+            }, 600000);
+
+            child.on("close", (code) => {
+                clearTimeout(timeout);
+                if (code === 0) {
+                    log(`Image ${imageName} pulled successfully`, "SUCCESS");
+                    resolve();
+                } else {
+                    reject(new Error(`docker pull exited with code ${code}`));
+                }
+            });
+
+            child.on("error", (error) => {
+                clearTimeout(timeout);
+                reject(new Error(`Failed to spawn docker pull: ${error.message}`));
+            });
+        });
+    }
+
+    /**
      * Execute command inside Docker container with timeout enforcement
      */
-    async execute(command, workspaceDir) {
+    async execute(command, workspaceDir, onDataCallback, jobId, serverUrl) {
         const containerName = `cmd-exec-${randomUUID().slice(0, 12)}`;
-        const imageName = "alpine:latest"; // Minimal base image
+        const imageName = this.getDockerImage(command); // Detect image from command
+
+        log(`[Docker] Container name: ${containerName}`, "INFO");
+        log(`[Docker] Using image: ${imageName}`, "INFO");
+        log(`[Docker] Workspace: ${workspaceDir}`, "INFO");
+        log(`[Docker] Timeout: ${this.timeout}ms (${Math.floor(this.timeout / 1000)}s)`, "INFO");
+        log(`[Docker] Memory limit: ${this.memoryLimit}`, "INFO");
+        log(`[Docker] CPU limit: ${this.cpuLimit}`, "INFO");
 
         try {
             // Verify Docker is available
             const available = await this.isDockerAvailable();
             if (!available) {
                 throw new Error("Docker is not available on this system");
+            }
+            log(`[Docker] Docker daemon is available`, "SUCCESS");
+
+            // Ensure image is available (pull if needed)
+            log(`[Docker] Checking if image ${imageName} exists locally...`, "INFO");
+            const exists = await this.imageExists(imageName);
+            if (!exists) {
+                log(`[Docker] Image not found locally, pulling...`, "WARN");
+                await this.pullImage(imageName);
+            } else {
+                log(`[Docker] Image ${imageName} found locally`, "SUCCESS");
             }
 
             // Build docker run arguments
@@ -135,9 +212,13 @@ class DockerExecutor {
                 command
             );
 
+            log(`[Docker] Starting container with command: docker ${dockerArgs.join(' ')}`, "INFO");
+            log(`[Docker] ========== CONTAINER OUTPUT START ==========`, "INFO");
+
             // Execute with timeout
-            return await this.executeDockerContainer(dockerArgs, containerName);
+            return await this.executeDockerContainer(dockerArgs, containerName, onDataCallback, jobId, serverUrl);
         } catch (error) {
+            log(`[Docker] Execution failed: ${error.message}`, "ERROR");
             return {
                 stdout: "",
                 stderr: `Docker execution error: ${error.message}`,
@@ -150,11 +231,12 @@ class DockerExecutor {
     /**
      * Execute docker container and capture output
      */
-    async executeDockerContainer(dockerArgs, containerName) {
+    async executeDockerContainer(dockerArgs, containerName, onDataCallback, jobId, serverUrl) {
         return new Promise((resolve) => {
             let stdout = "";
             let stderr = "";
             let timedOut = false;
+            let cancelledByUser = false;
 
             // Hard timeout - forcefully kill container
             const timeoutHandle = setTimeout(() => {
@@ -166,54 +248,111 @@ class DockerExecutor {
                 }
             }, this.timeout);
 
+            // Periodic cancellation check (every 2 seconds)
+            const cancelCheckInterval = setInterval(async () => {
+                if (jobId && serverUrl) {
+                    try {
+                        const checkUrl = `${serverUrl}/api/jobs/check-cancel?jobId=${jobId}`;
+                        log(`[Docker] Checking cancellation status: ${checkUrl}`, "INFO");
+                        const response = await httpRequest(
+                            "GET",
+                            checkUrl
+                        );
+                        log(`[Docker] Cancel check response: ${response.statusCode} - ${response.body}`, "INFO");
+                        if (response.statusCode === 200) {
+                            const data = JSON.parse(response.body);
+                            if (data.success && data.cancelRequested) {
+                                log(`[Docker] Cancellation requested by user. Killing container ${containerName}...`, "WARN");
+                                cancelledByUser = true;
+                                clearInterval(cancelCheckInterval);
+                                clearTimeout(timeoutHandle);
+                                try {
+                                    execSync(`docker kill ${containerName}`, { stdio: "pipe", timeout: 5000 });
+                                } catch {
+                                    // Already dead
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        // Log errors for debugging
+                        log(`[Docker] Cancel check error: ${error.message}`, "WARN");
+                    }
+                }
+            }, 2000); // Check every 2 seconds
+
             try {
                 const child = spawn("docker", dockerArgs, {
                     stdio: ["ignore", "pipe", "pipe"],
                 });
 
-                // Capture output streams
+                // Capture output streams and log them in real-time
                 if (child.stdout) {
                     child.stdout.on("data", (data) => {
-                        stdout += data.toString();
+                        const text = data.toString();
+                        stdout += text;
+                        process.stdout.write(text);
+                        if (onDataCallback) {
+                            onDataCallback({ type: 'stdout', text });
+                        }
                     });
                 }
 
                 if (child.stderr) {
                     child.stderr.on("data", (data) => {
-                        stderr += data.toString();
+                        const text = data.toString();
+                        stderr += text;
+                        process.stderr.write(text);
+                        if (onDataCallback) {
+                            onDataCallback({ type: 'stderr', text });
+                        }
                     });
                 }
 
                 // Handle exit
                 child.on("close", (code) => {
                     clearTimeout(timeoutHandle);
-                    if (timedOut) {
+                    clearInterval(cancelCheckInterval);
+                    log(`[Docker] ========== CONTAINER OUTPUT END ==========`, "INFO");
+                    log(`[Docker] Container exited with code: ${code}`, code === 0 ? "SUCCESS" : "WARN");
+
+                    if (cancelledByUser) {
+                        log(`[Docker] Container was killed due to user cancellation`, "WARN");
+                        stderr += `\n[CANCELLED] Job was cancelled by user`;
+                    } else if (timedOut) {
+                        log(`[Docker] Container was killed due to timeout`, "ERROR");
                         stderr += `\n[TIMEOUT] Container exceeded ${this.timeout}ms timeout and was killed`;
                     }
                     resolve({
                         stdout,
                         stderr,
-                        exitCode: timedOut ? 124 : (code || 0),
+                        exitCode: cancelledByUser ? 130 : (timedOut ? 124 : (code || 0)),
                         timedOut,
+                        cancelled: cancelledByUser,
                     });
                 });
 
                 child.on("error", (error) => {
                     clearTimeout(timeoutHandle);
+                    clearInterval(cancelCheckInterval);
+                    log(`[Docker] Container spawn error: ${error.message}`, "ERROR");
                     resolve({
                         stdout,
                         stderr: stderr + `\nSpawn error: ${error.message}`,
                         exitCode: 1,
                         timedOut: false,
+                        cancelled: false,
                     });
                 });
             } catch (error) {
                 clearTimeout(timeoutHandle);
+                clearInterval(cancelCheckInterval);
+                log(`[Docker] Container execution error: ${error.message}`, "ERROR");
                 resolve({
                     stdout,
                     stderr: stderr + `\nExecution error: ${error.message}`,
                     exitCode: 1,
                     timedOut: false,
+                    cancelled: false,
                 });
             }
         });
@@ -514,7 +653,7 @@ class WorkerAgent {
                     }
                 };
 
-                const result = await this.executeCommand(command, extractDir, streamCallback);
+                const result = await this.executeCommand(command, extractDir, streamCallback, job.jobId);
                 stdout += result.stdout;
                 stderr += result.stderr;
                 exitCode = result.exitCode;
@@ -585,10 +724,10 @@ class WorkerAgent {
         }
     }
 
-    async executeCommand(command, cwd, onDataCallback) {
+    async executeCommand(command, cwd, onDataCallback, jobId) {
         // Try Docker execution if enabled
         if (ENABLE_DOCKER) {
-            return await this.executeCommandDocker(command, cwd, onDataCallback);
+            return await this.executeCommandDocker(command, cwd, onDataCallback, jobId);
         } else {
             // Fallback to direct execution
             return await this.executeCommandDirect(command, cwd, onDataCallback);
@@ -603,11 +742,11 @@ class WorkerAgent {
      * - Resource limits (CPU, memory)
      * - Hard timeout enforcement
      */
-    async executeCommandDocker(command, cwd, onDataCallback) {
+    async executeCommandDocker(command, cwd, onDataCallback, jobId) {
         const dockerExecutor = new DockerExecutor(DOCKER_TIMEOUT, DOCKER_MEMORY_LIMIT, DOCKER_CPU_LIMIT);
 
         try {
-            const result = await dockerExecutor.execute(command, cwd);
+            const result = await dockerExecutor.execute(command, cwd, onDataCallback, jobId, this.serverUrl);
 
             // Stream output in chunks if callback provided
             if (onDataCallback && result.stdout) {

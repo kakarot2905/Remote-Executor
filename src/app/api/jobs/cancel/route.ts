@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     if (!jobId) {
       return NextResponse.json(
         { success: false, error: "Missing jobId" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -22,14 +22,27 @@ export async function POST(request: NextRequest) {
     if (!job) {
       return NextResponse.json(
         { success: false, error: "Job not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
-    // Update job status to cancelled
+    // If job is running, mark for cancellation so worker can kill container
+    if (job.status === "running") {
+      job.cancelRequested = true;
+      await saveJobs();
+
+      return NextResponse.json({
+        success: true,
+        message: "Cancellation requested. Worker will kill container shortly.",
+        jobId: job.jobId,
+      });
+    }
+
+    // If job is pending, cancel immediately
     job.status = "failed";
     job.errorMessage = "Job cancelled by user";
     job.completedAt = Date.now();
+    job.cancelRequested = true;
 
     // Free up the worker if assigned
     if (job.workerId) {
@@ -52,7 +65,7 @@ export async function POST(request: NextRequest) {
     console.error("Cancel job error:", error);
     return NextResponse.json(
       { success: false, error: "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -19,6 +19,7 @@ export const jobRegistry = new Map<
     startedAt: number | null;
     completedAt: number | null;
     errorMessage: string | null;
+    cancelRequested: boolean;
   }
 >();
 
@@ -34,6 +35,7 @@ export const workerRegistry = new Map<
     status: "idle" | "busy" | "offline";
     lastHeartbeat: number;
     createdAt: number;
+    currentJobId: string | null;
   }
 >();
 

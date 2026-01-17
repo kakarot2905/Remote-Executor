@@ -17,8 +17,8 @@ docker run \
   --memory-swap=-1 \
   --pids-limit=32 \
   -v <workspace>:/workspace:rw \
-  -v /run:size=10m \
-  -v /tmp:size=50m \
+  --tmpfs=/run:size=10m \
+  --tmpfs=/tmp:size=50m \
   -w /workspace \
   <image-name> \
   /bin/sh -c "<command>"
@@ -56,8 +56,8 @@ docker run \
 | Mount                    | Purpose         | Mode       | Size      |
 | ------------------------ | --------------- | ---------- | --------- |
 | `-v <dir>:/workspace:rw` | Task files      | Read-write | Unlimited |
-| `-v /run:size=10m`       | Runtime data    | Temp       | 10 MB     |
-| `-v /tmp:size=50m`       | Temporary files | Temp       | 50 MB     |
+| `--tmpfs=/run:size=10m`  | Runtime data    | Temp       | 10 MB     |
+| `--tmpfs=/tmp:size=50m`  | Temporary files | Temp       | 50 MB     |
 
 #### Working Context
 

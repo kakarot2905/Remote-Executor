@@ -44,7 +44,7 @@ export default function TerminalInterface({
   const [execId, setExecId] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [executionMode, setExecutionMode] = useState<"direct" | "distributed">(
-    "distributed"
+    "distributed",
   );
   const [jobId, setJobId] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
@@ -90,7 +90,7 @@ export default function TerminalInterface({
 
   const addLog = (
     content: string,
-    type: "command" | "output" | "error" | "info" = "info"
+    type: "command" | "output" | "error" | "info" = "info",
   ) => {
     setLogs((prev) => [
       ...prev,
@@ -127,7 +127,7 @@ export default function TerminalInterface({
     abortRef.current = abortController;
     addLog(
       `Starting execution (mode: ${executionMode}) with file: ${selectedFile.name}`,
-      "info"
+      "info",
     );
     addLog("Uploading file and executing commands...", "info");
 
@@ -222,7 +222,7 @@ export default function TerminalInterface({
       } else {
         addLog(
           `Error: ${error instanceof Error ? error.message : String(error)}`,
-          "error"
+          "error",
         );
       }
     } finally {
@@ -260,10 +260,13 @@ export default function TerminalInterface({
 
           const job = await response.json();
 
-          if (job.status === "running") {
+          if (job.status === "ASSIGNED" || job.status === "RUNNING") {
             // Show running message only once
             if (!hasShownRunningMessage) {
-              addLog(`Job is running on worker: ${job.workerId}`, "info");
+              addLog(
+                `Job is running on worker: ${job.assignedAgentId}`,
+                "info",
+              );
               hasShownRunningMessage = true;
             }
 
@@ -283,7 +286,7 @@ export default function TerminalInterface({
               });
               lastStderrLength = job.stderr.length;
             }
-          } else if (job.status === "completed") {
+          } else if (job.status === "COMPLETED") {
             addLog("✓ Job completed!", "info");
 
             // Display any remaining output that wasn't shown during streaming
@@ -310,7 +313,7 @@ export default function TerminalInterface({
             setIsExecuting(false);
             setJobId(null);
             resolve();
-          } else if (job.status === "failed") {
+          } else if (job.status === "FAILED") {
             addLog("✗ Job failed!", "error");
             addLog(job.errorMessage || "Unknown error", "error");
 
@@ -489,7 +492,7 @@ export default function TerminalInterface({
                     checked={executionMode === "distributed"}
                     onChange={(e) =>
                       setExecutionMode(
-                        e.target.value as "distributed" | "direct"
+                        e.target.value as "distributed" | "direct",
                       )
                     }
                     disabled={isExecuting}
@@ -511,7 +514,7 @@ export default function TerminalInterface({
                     checked={executionMode === "direct"}
                     onChange={(e) =>
                       setExecutionMode(
-                        e.target.value as "distributed" | "direct"
+                        e.target.value as "distributed" | "direct",
                       )
                     }
                     disabled={isExecuting}
@@ -584,7 +587,7 @@ export default function TerminalInterface({
             {/* Terminal Content */}
             <div
               ref={terminalRef}
-              className="flex-1 p-4 overflow-y-scroll space-y-1 text-sm "
+              className="flex-1 p-4 overflow-y-auto space-y-1 text-sm max-h-[calc(100vh-400px)]"
             >
               {logs.length === 0 ? (
                 <div className="text-green-600 ">
@@ -604,10 +607,10 @@ export default function TerminalInterface({
                       log.type === "command"
                         ? "text-yellow-400 font-bold"
                         : log.type === "error"
-                        ? "text-red-400"
-                        : log.type === "info"
-                        ? "text-cyan-400"
-                        : "text-green-400"
+                          ? "text-red-400"
+                          : log.type === "info"
+                            ? "text-cyan-400"
+                            : "text-green-400"
                     }`}
                   >
                     {log.content}

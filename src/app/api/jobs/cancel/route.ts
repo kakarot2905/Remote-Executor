@@ -5,6 +5,7 @@ import {
   saveJobs,
   saveWorkers,
 } from "@/lib/registries";
+import { releaseJobResources, scheduleJobs } from "@/lib/scheduler";
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,7 +28,7 @@ export async function POST(request: NextRequest) {
     }
 
     // If job is running, mark for cancellation so worker can kill container
-    if (job.status === "running") {
+    if (job.status === "RUNNING") {
       job.cancelRequested = true;
       await saveJobs();
 
@@ -38,23 +39,25 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // If job is pending, cancel immediately
-    job.status = "failed";
+    // If job is queued/assigned, cancel immediately and free resources
+    job.status = "FAILED";
     job.errorMessage = "Job cancelled by user";
     job.completedAt = Date.now();
     job.cancelRequested = true;
 
-    // Free up the worker if assigned
-    if (job.workerId) {
-      const worker = workerRegistry.get(job.workerId);
-      if (worker) {
-        worker.status = "idle";
-        worker.currentJobId = null;
-        await saveWorkers();
-      }
+    const workerId = job.assignedAgentId;
+    releaseJobResources(job.jobId);
+
+    job.assignedAgentId = null;
+
+    const worker = workerId ? workerRegistry.get(workerId) : null;
+    if (worker && worker.currentJobIds.length === 0) {
+      worker.status = "IDLE";
     }
 
     await saveJobs();
+    await saveWorkers();
+    scheduleJobs("job-cancelled");
 
     return NextResponse.json({
       success: true,

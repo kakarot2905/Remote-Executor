@@ -4,13 +4,18 @@ import React, { useState, useEffect } from "react";
 
 interface Worker {
   workerId: string;
-  status: "idle" | "busy";
+  status: "IDLE" | "BUSY" | "UNHEALTHY" | "OFFLINE";
   hostname: string;
   os: string;
   cpuCount: number;
+  cpuUsage?: number;
+  ramTotalMb?: number;
+  ramFreeMb?: number;
   lastHeartbeat: number;
-  currentJobId: string | null;
-  registeredAt: number;
+  currentJobIds: string[];
+  reservedCpu?: number;
+  reservedRamMb?: number;
+  updatedAt?: number;
 }
 
 export default function AvailableNodes() {
@@ -19,6 +24,7 @@ export default function AvailableNodes() {
     total: 0,
     idle: 0,
     busy: 0,
+    unhealthy: 0,
   });
   const [loading, setLoading] = useState(true);
 
@@ -43,18 +49,19 @@ export default function AvailableNodes() {
 
               // If both are online, sort by status: idle first, then busy
               if (!aIsOffline && !bIsOffline) {
-                if (a.status === "idle" && b.status === "busy") return -1;
-                if (a.status === "busy" && b.status === "idle") return 1;
+                if (a.status === "IDLE" && b.status === "BUSY") return -1;
+                if (a.status === "BUSY" && b.status === "IDLE") return 1;
               }
 
               return 0;
-            }
+            },
           );
           setWorkers(sortedWorkers);
           setStats({
             total: data.totalWorkers || 0,
             idle: data.idleWorkers || 0,
             busy: data.busyWorkers || 0,
+            unhealthy: data.unhealthyWorkers || 0,
           });
         }
       } catch (error) {
@@ -74,7 +81,10 @@ export default function AvailableNodes() {
   }, []);
 
   const getStatusColor = (status: string) => {
-    return status === "idle" ? "text-green-400" : "text-yellow-400";
+    if (status === "IDLE") return "text-green-400";
+    if (status === "BUSY") return "text-yellow-400";
+    if (status === "UNHEALTHY") return "text-orange-400";
+    return "text-gray-400";
   };
 
   const getOSIcon = (os: string) => {
@@ -110,6 +120,12 @@ export default function AvailableNodes() {
             <span className="text-yellow-300">Busy: {stats.busy}</span>
           </div>
           <div className="flex items-center gap-1">
+            <span className="text-orange-400">●</span>
+            <span className="text-orange-300">
+              Unhealthy: {stats.unhealthy}
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
             <span className="text-gray-400">●</span>
             <span className="text-gray-300">Total: {stats.total}</span>
           </div>
@@ -130,15 +146,19 @@ export default function AvailableNodes() {
         ) : (
           workers.map((worker) => {
             const isOffline = Date.now() - worker.lastHeartbeat > 15000;
+            const activeJobs = worker.currentJobIds?.length || 0;
+            const statusLabel = isOffline ? "OFFLINE" : worker.status;
             return (
               <div
                 key={worker.workerId}
                 className={`border rounded p-2 text-xs ${
                   isOffline
                     ? "border-gray-600 bg-gray-900 opacity-60"
-                    : worker.status === "idle"
-                    ? "border-green-400 bg-gray-800"
-                    : "border-yellow-400 bg-gray-700"
+                    : worker.status === "IDLE"
+                      ? "border-green-400 bg-gray-800"
+                      : worker.status === "BUSY"
+                        ? "border-yellow-400 bg-gray-700"
+                        : "border-orange-400 bg-gray-700"
                 }`}
               >
                 {/* Worker ID and Status */}
@@ -150,12 +170,14 @@ export default function AvailableNodes() {
                     className={`px-2 py-0.5 rounded ${
                       isOffline
                         ? "bg-gray-700 text-gray-400"
-                        : worker.status === "idle"
-                        ? "bg-green-900 text-green-300"
-                        : "bg-yellow-900 text-yellow-300"
+                        : worker.status === "IDLE"
+                          ? "bg-green-900 text-green-300"
+                          : worker.status === "BUSY"
+                            ? "bg-yellow-900 text-yellow-300"
+                            : "bg-orange-900 text-orange-200"
                     }`}
                   >
-                    {isOffline ? "OFFLINE" : worker.status.toUpperCase()}
+                    {statusLabel}
                   </span>
                 </div>
 
@@ -166,17 +188,31 @@ export default function AvailableNodes() {
                     <span>{worker.os}</span>
                     <span className="text-gray-500">|</span>
                     <span>CPU: {worker.cpuCount}</span>
+                    {worker.cpuUsage !== undefined && (
+                      <span className="text-gray-500">
+                        ({Math.round(worker.cpuUsage)}% load)
+                      </span>
+                    )}
                   </div>
 
                   <div className="text-gray-400">Host: {worker.hostname}</div>
+
+                  <div className="text-gray-400 text-xs flex gap-2">
+                    <span>
+                      RAM: {worker.ramFreeMb ?? "?"} /{" "}
+                      {worker.ramTotalMb ?? "?"} MB free
+                    </span>
+                    <span className="text-gray-500">|</span>
+                    <span>Jobs: {activeJobs}</span>
+                  </div>
 
                   <div className="flex justify-between text-gray-500 text-xs">
                     <span>
                       Last heartbeat: {formatTime(worker.lastHeartbeat)}
                     </span>
-                    {worker.currentJobId && (
-                      <span className="text-yellow-400">
-                        Job: {worker.currentJobId.substring(0, 12)}...
+                    {activeJobs > 0 && (
+                      <span className={getStatusColor(worker.status)}>
+                        Active: {activeJobs}
                       </span>
                     )}
                   </div>

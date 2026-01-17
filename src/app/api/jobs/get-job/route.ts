@@ -5,92 +5,73 @@ import {
   workerRegistry,
   saveWorkers,
 } from "@/lib/registries";
-
-// Health check: mark idle workers as offline if they haven't sent heartbeat
-const cleanupOfflineWorkers = () => {
-  const now = Date.now();
-  const heartbeatTimeout = 30000; // 30 seconds
-
-  workerRegistry.forEach((worker, workerId) => {
-    if (now - worker.lastHeartbeat > heartbeatTimeout) {
-      worker.status = "offline";
-      console.log(`Worker ${workerId} marked as offline`);
-    }
-  });
-};
+import { scheduleJobs } from "@/lib/scheduler";
 
 export async function GET(request: NextRequest) {
   try {
-    // Clean up offline workers first
-    cleanupOfflineWorkers();
+    const workerId = request.nextUrl.searchParams.get("workerId");
 
-    // Find the first idle worker
-    let idleWorker = null;
-    for (const worker of workerRegistry.values()) {
-      if (worker.status === "idle") {
-        idleWorker = worker;
-        break;
-      }
-    }
-
-    if (!idleWorker) {
+    if (!workerId) {
       return NextResponse.json(
-        {
-          success: false,
-          message: "No idle workers available",
-          job: null,
-        },
-        { status: 202 } // 202 Accepted but no content
+        { success: false, error: "workerId is required" },
+        { status: 400 },
       );
     }
 
-    // Find the first pending job
-    let pendingJob = null;
-    for (const job of jobRegistry.values()) {
-      if (job.status === "pending") {
-        pendingJob = job;
-        break;
-      }
-    }
-
-    if (!pendingJob) {
+    const worker = workerRegistry.get(workerId);
+    if (!worker) {
       return NextResponse.json(
-        {
-          success: false,
-          message: "No pending jobs",
-          job: null,
-        },
-        { status: 202 }
+        { success: false, error: "Worker not found" },
+        { status: 404 },
       );
     }
 
-    // Assign the job to the worker
-    pendingJob.workerId = idleWorker.workerId;
-    pendingJob.status = "running";
-    pendingJob.startedAt = Date.now();
+    // Run scheduler to ensure freshest assignments
+    scheduleJobs("worker-poll");
 
-    idleWorker.status = "busy";
+    const assignedJob = Array.from(jobRegistry.values()).find(
+      (job) => job.status === "ASSIGNED" && job.assignedAgentId === workerId,
+    );
+
+    if (!assignedJob) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "No assigned jobs for this worker",
+          job: null,
+        },
+        { status: 202 },
+      );
+    }
+
+    const now = Date.now();
+    assignedJob.status = "RUNNING";
+    assignedJob.startedAt = now;
+    assignedJob.attempts = (assignedJob.attempts || 0) + 1;
+
+    worker.status = "BUSY";
+    worker.currentJobIds = Array.from(
+      new Set([...worker.currentJobIds, assignedJob.jobId]),
+    );
+    worker.updatedAt = now;
 
     saveJobs();
     saveWorkers();
 
-    console.log(
-      `Job ${pendingJob.jobId} assigned to worker ${idleWorker.workerId}`
-    );
-
     return NextResponse.json({
       success: true,
       job: {
-        jobId: pendingJob.jobId,
-        command: pendingJob.command,
-        fileUrl: pendingJob.fileUrl,
-        filename: pendingJob.filename,
+        jobId: assignedJob.jobId,
+        command: assignedJob.command,
+        fileUrl: assignedJob.fileUrl,
+        filename: assignedJob.filename,
+        timeoutMs: assignedJob.timeoutMs,
       },
     });
   } catch (error: any) {
     return NextResponse.json(
       { error: error.message || "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

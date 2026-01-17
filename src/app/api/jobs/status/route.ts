@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       jobId: job.jobId,
       status: job.status,
-      workerId: job.workerId,
+      assignedAgentId: job.assignedAgentId,
       command: job.command,
       filename: job.filename,
       stdout: job.stdout,
@@ -26,13 +26,20 @@ export async function GET(request: NextRequest) {
       exitCode: job.exitCode,
       errorMessage: job.errorMessage,
       createdAt: job.createdAt,
+      queuedAt: job.queuedAt,
+      assignedAt: job.assignedAt,
       startedAt: job.startedAt,
       completedAt: job.completedAt,
+      attempts: job.attempts,
+      maxRetries: job.maxRetries,
+      requiredCpu: job.requiredCpu,
+      requiredRamMb: job.requiredRamMb,
+      timeoutMs: job.timeoutMs,
     });
   } catch (error: any) {
     return NextResponse.json(
       { error: error.message || "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 import path from "path";
 import fs from "fs";
 import os from "os";
+import { scheduleJobs } from "@/lib/scheduler";
 
 // Track active processes by execution id so we can stop them on demand
 const activeProcesses = new Map<string, ReturnType<typeof spawn>>();
@@ -22,7 +23,7 @@ export async function POST(request: NextRequest) {
     if (!zipFile || !commands) {
       return NextResponse.json(
         { error: "File and commands are required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -90,7 +91,7 @@ export async function POST(request: NextRequest) {
               execId,
               command,
               extractDir,
-              controller
+              controller,
             );
           }
 
@@ -130,7 +131,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     return NextResponse.json(
       { error: error.message || "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -139,7 +140,7 @@ function executeCommandStreaming(
   execId: string,
   command: string,
   workingDir: string,
-  controller: ReadableStreamDefaultController<string>
+  controller: ReadableStreamDefaultController<string>,
 ): Promise<void> {
   return new Promise((resolve) => {
     // Determine the shell based on OS
@@ -232,7 +233,7 @@ export async function DELETE(request: NextRequest) {
     if (!execId) {
       return NextResponse.json(
         { error: "execId is required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -241,7 +242,7 @@ export async function DELETE(request: NextRequest) {
   } catch (error: any) {
     return NextResponse.json(
       { error: error.message || "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -252,7 +253,7 @@ export async function DELETE(request: NextRequest) {
 
 async function handleDistributedExecution(
   zipFile: File,
-  commands: string
+  commands: string,
 ): Promise<NextResponse> {
   try {
     // Save the uploaded file temporarily
@@ -283,24 +284,34 @@ async function handleDistributedExecution(
 
     // Create a job in the registry
     const { jobRegistry, saveJobs } = await import("@/lib/registries");
+    const now = Date.now();
     const job = {
       jobId,
-      workerId: null,
-      status: "pending" as const,
       command: commands,
       fileUrl,
       filename: zipFile.name,
+      requiredCpu: 1,
+      requiredRamMb: 256,
+      timeoutMs: 5 * 60 * 1000,
+      status: "QUEUED" as const,
+      assignedAgentId: null,
       stdout: "",
       stderr: "",
       exitCode: null,
-      createdAt: Date.now(),
+      createdAt: now,
+      queuedAt: now,
+      assignedAt: null,
       startedAt: null,
       completedAt: null,
       errorMessage: null,
+      cancelRequested: false,
+      attempts: 0,
+      maxRetries: 3,
     };
 
     jobRegistry.set(jobId, job);
     saveJobs();
+    scheduleJobs("distributed-upload");
 
     // Clean up temp upload directory
     setTimeout(() => {
@@ -320,12 +331,12 @@ async function handleDistributedExecution(
         message: "Job created. Waiting for idle worker to pick it up.",
         checkStatusUrl: `/api/jobs/status?jobId=${jobId}`,
       },
-      { headers: { "X-Job-Id": jobId } }
+      { headers: { "X-Job-Id": jobId } },
     );
   } catch (error: any) {
     return NextResponse.json(
       { error: error.message || "Failed to create distributed job" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

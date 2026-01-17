@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jobRegistry, saveJobs } from "@/lib/registries";
+import { scheduleJobs } from "@/lib/scheduler";
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { command, fileUrl, filename } = body;
+    const {
+      command,
+      fileUrl,
+      filename,
+      requiredCpu,
+      requiredRamMb,
+      timeoutMs,
+      maxRetries,
+    } = body;
 
     if (!command || !fileUrl || !filename) {
       return NextResponse.json(
@@ -19,25 +28,35 @@ export async function POST(request: NextRequest) {
       .toString(36)
       .substr(2, 9)}`;
 
+    const now = Date.now();
+
     const job = {
       jobId,
-      workerId: null,
-      status: "pending" as const,
       command,
       fileUrl,
       filename,
+      requiredCpu: Number(requiredCpu) || 1,
+      requiredRamMb: Number(requiredRamMb) || 256,
+      timeoutMs: Number(timeoutMs) || 5 * 60 * 1000,
+      status: "QUEUED" as const,
+      assignedAgentId: null,
       stdout: "",
       stderr: "",
       exitCode: null,
-      createdAt: Date.now(),
+      createdAt: now,
+      queuedAt: now,
+      assignedAt: null,
       startedAt: null,
       completedAt: null,
       errorMessage: null,
       cancelRequested: false,
+      attempts: 0,
+      maxRetries: maxRetries !== undefined ? Number(maxRetries) : 3,
     };
 
     jobRegistry.set(jobId, job);
     saveJobs();
+    scheduleJobs("job-created");
 
     return NextResponse.json({
       success: true,

@@ -9,23 +9,30 @@ export async function GET(request: NextRequest) {
       hostname: worker.hostname,
       os: worker.os,
       cpuCount: worker.cpuCount,
+      cpuUsage: worker.cpuUsage,
+      ramTotalMb: worker.ramTotalMb,
+      ramFreeMb: worker.ramFreeMb,
       lastHeartbeat: worker.lastHeartbeat,
-      currentJobId: worker.currentJobId,
-      registeredAt: worker.registeredAt,
+      currentJobIds: worker.currentJobIds,
+      reservedCpu: worker.reservedCpu,
+      reservedRamMb: worker.reservedRamMb,
+      cooldownUntil: worker.cooldownUntil,
+      updatedAt: worker.updatedAt,
     }));
 
     return NextResponse.json({
       success: true,
       workers,
       totalWorkers: workers.length,
-      idleWorkers: workers.filter((w) => w.status === "idle").length,
-      busyWorkers: workers.filter((w) => w.status === "busy").length,
+      idleWorkers: workers.filter((w) => w.status === "IDLE").length,
+      busyWorkers: workers.filter((w) => w.status === "BUSY").length,
+      unhealthyWorkers: workers.filter((w) => w.status === "UNHEALTHY").length,
     });
   } catch (error) {
     console.error("List workers error:", error);
     return NextResponse.json(
       { success: false, error: "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

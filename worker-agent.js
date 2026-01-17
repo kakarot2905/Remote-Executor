@@ -23,7 +23,7 @@
 import { spawn, execSync } from "child_process";
 import { createWriteStream } from "fs";
 import { mkdir, readFile, writeFile, rm, access, constants as fsConstants } from "fs/promises";
-import { homedir, cpus } from "os";
+import { homedir, cpus, freemem, totalmem, type as osType } from "os";
 import { join, resolve } from "path";
 import { randomUUID } from "crypto";
 import https from "https";
@@ -54,6 +54,7 @@ const DOCKER_TIMEOUT = parseInt(process.env.DOCKER_TIMEOUT || "300000", 10); // 
 const DOCKER_MEMORY_LIMIT = process.env.DOCKER_MEMORY_LIMIT || "512m"; // 512 MB
 const DOCKER_CPU_LIMIT = process.env.DOCKER_CPU_LIMIT || "2.0"; // 2 CPU cores
 const ENABLE_DOCKER = process.env.ENABLE_DOCKER !== "false"; // Enabled by default
+const MAX_PARALLEL_JOBS = parseInt(process.env.MAX_PARALLEL_JOBS || "0", 10); // 0 = auto based on CPU
 
 // ============================================================================
 // Docker Executor (Sandboxed Task Execution)
@@ -360,6 +361,49 @@ class DockerExecutor {
 }
 
 // ============================================================================
+// Resource Sampling
+// ============================================================================
+
+let lastCpuSnapshot = cpus();
+
+const getCpuUsagePercent = () => {
+    const current = cpus();
+
+    let idleDiff = 0;
+    let totalDiff = 0;
+
+    current.forEach((cpu, index) => {
+        const prev = lastCpuSnapshot[index];
+        if (!prev) return;
+
+        const prevTimes = prev.times;
+        const currTimes = cpu.times;
+
+        const prevTotal = Object.values(prevTimes).reduce((a, b) => a + b, 0);
+        const currTotal = Object.values(currTimes).reduce((a, b) => a + b, 0);
+
+        idleDiff += currTimes.idle - prevTimes.idle;
+        totalDiff += currTotal - prevTotal;
+    });
+
+    lastCpuSnapshot = current;
+
+    if (totalDiff === 0) return 0;
+    const usage = 100 - (idleDiff / totalDiff) * 100;
+    return Number(usage.toFixed(1));
+};
+
+const collectSystemStats = () => {
+    return {
+        cpuCount: cpus().length,
+        cpuUsage: getCpuUsagePercent(),
+        ramTotalMb: Math.round(totalmem() / 1024 / 1024),
+        ramFreeMb: Math.round(freemem() / 1024 / 1024),
+        osType: osType(),
+    };
+};
+
+// ============================================================================
 // Logging
 // ============================================================================
 
@@ -467,7 +511,11 @@ class WorkerAgent {
         this.workerId = workerId;
         this.serverUrl = serverUrl;
         this.isRunning = false;
-        this.currentJobId = null;
+        this.activeJobs = new Map();
+        this.maxParallel =
+            MAX_PARALLEL_JOBS > 0
+                ? MAX_PARALLEL_JOBS
+                : Math.max(1, Math.floor(cpus().length / 2));
         this.heartbeatTimer = null;
         this.pollTimer = null;
     }
@@ -482,6 +530,7 @@ class WorkerAgent {
         log(`Starting worker ${this.workerId}`, "INFO");
         log(`Server: ${this.serverUrl}`, "INFO");
         log(`Work directory: ${WORK_DIR}`, "INFO");
+        log(`Max parallel jobs: ${this.maxParallel}`, "INFO");
 
         // Create work directory
         try {
@@ -530,7 +579,9 @@ class WorkerAgent {
                 hostname: HOSTNAME,
                 os: process.platform,
                 cpuCount: cpus().length,
+                ...collectSystemStats(),
                 version: WORKER_VERSION,
+                status: "IDLE",
             }
         );
 
@@ -546,10 +597,18 @@ class WorkerAgent {
 
     async sendHeartbeat() {
         try {
+            const stats = collectSystemStats();
+            const agentStatus = this.activeJobs.size > 0 ? "BUSY" : "IDLE";
             const response = await httpRequest(
                 "POST",
                 `${this.serverUrl}/api/workers/heartbeat`,
-                { workerId: this.workerId }
+                {
+                    workerId: this.workerId,
+                    cpuUsage: stats.cpuUsage,
+                    ramFreeMb: stats.ramFreeMb,
+                    ramTotalMb: stats.ramTotalMb,
+                    status: agentStatus,
+                }
             );
 
             if (response.statusCode !== 200) {
@@ -561,13 +620,15 @@ class WorkerAgent {
     }
 
     async pollForJob() {
-        if (this.currentJobId) {
-            // Already working on a job
-            return;
+        if (this.activeJobs.size >= this.maxParallel) {
+            return; // At capacity
         }
 
         try {
-            const response = await httpRequest("GET", `${this.serverUrl}/api/jobs/get-job`);
+            const response = await httpRequest(
+                "GET",
+                `${this.serverUrl}/api/jobs/get-job?workerId=${this.workerId}`
+            );
 
             if (response.statusCode === 202) {
                 // No jobs available
@@ -581,15 +642,26 @@ class WorkerAgent {
 
             const data = JSON.parse(response.body);
             if (data.success && data.job) {
-                await this.executeJob(data.job);
+                this.startJob(data.job);
             }
         } catch (e) {
             log(`Job poll error: ${e}`, "WARN");
         }
     }
 
+    startJob(job) {
+        const jobPromise = this.executeJob(job)
+            .catch((err) => {
+                log(`Job ${job.jobId} execution error: ${err.message}`, "ERROR");
+            })
+            .finally(() => {
+                this.activeJobs.delete(job.jobId);
+            });
+
+        this.activeJobs.set(job.jobId, jobPromise);
+    }
+
     async executeJob(job) {
-        this.currentJobId = job.jobId;
         const jobDir = join(WORK_DIR, job.jobId);
         const zipPath = join(jobDir, job.filename);
 
@@ -653,7 +725,13 @@ class WorkerAgent {
                     }
                 };
 
-                const result = await this.executeCommand(command, extractDir, streamCallback, job.jobId);
+                const result = await this.executeCommand(
+                    command,
+                    extractDir,
+                    streamCallback,
+                    job.jobId,
+                    job.timeoutMs
+                );
                 stdout += result.stdout;
                 stderr += result.stderr;
                 exitCode = result.exitCode;
@@ -719,15 +797,13 @@ class WorkerAgent {
             } catch (e) {
                 log(`Failed to cleanup job directory: ${e}`, "WARN");
             }
-
-            this.currentJobId = null;
         }
     }
 
-    async executeCommand(command, cwd, onDataCallback, jobId) {
+    async executeCommand(command, cwd, onDataCallback, jobId, timeoutMs) {
         // Try Docker execution if enabled
         if (ENABLE_DOCKER) {
-            return await this.executeCommandDocker(command, cwd, onDataCallback, jobId);
+            return await this.executeCommandDocker(command, cwd, onDataCallback, jobId, timeoutMs);
         } else {
             // Fallback to direct execution
             return await this.executeCommandDirect(command, cwd, onDataCallback);
@@ -742,8 +818,8 @@ class WorkerAgent {
      * - Resource limits (CPU, memory)
      * - Hard timeout enforcement
      */
-    async executeCommandDocker(command, cwd, onDataCallback, jobId) {
-        const dockerExecutor = new DockerExecutor(DOCKER_TIMEOUT, DOCKER_MEMORY_LIMIT, DOCKER_CPU_LIMIT);
+    async executeCommandDocker(command, cwd, onDataCallback, jobId, timeoutMs) {
+        const dockerExecutor = new DockerExecutor(timeoutMs || DOCKER_TIMEOUT, DOCKER_MEMORY_LIMIT, DOCKER_CPU_LIMIT);
 
         try {
             const result = await dockerExecutor.execute(command, cwd, onDataCallback, jobId, this.serverUrl);

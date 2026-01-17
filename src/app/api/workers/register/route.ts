@@ -1,10 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
-import { workerRegistry, saveWorkers } from "@/lib/registries";
+import {
+  workerRegistry,
+  saveWorkers,
+  WorkerRecord,
+  AgentStatus,
+} from "@/lib/registries";
+import { scheduleJobs } from "@/lib/scheduler";
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { workerId, hostname, os: osInfo, cpuCount, version } = body;
+    const {
+      workerId,
+      hostname,
+      os: osInfo,
+      cpuCount,
+      cpuUsage,
+      ramTotalMb,
+      ramFreeMb,
+      version,
+      status,
+    } = body;
 
     if (!workerId || !hostname) {
       return NextResponse.json(
@@ -13,20 +29,36 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const workerInfo = {
+    const now = Date.now();
+    const normalizedStatus: AgentStatus =
+      status === "BUSY" || status === "UNHEALTHY" || status === "OFFLINE"
+        ? status
+        : "IDLE";
+
+    const workerInfo: WorkerRecord = {
       workerId,
       hostname,
       os: osInfo || process.platform,
-      cpuCount: cpuCount || 1,
-      status: "idle" as const,
-      lastHeartbeat: Date.now(),
+      cpuCount: Number(cpuCount) || 1,
+      cpuUsage: Number(cpuUsage) || 0,
+      ramTotalMb: Math.max(0, Math.round(Number(ramTotalMb) || 0)),
+      ramFreeMb: Math.max(0, Math.round(Number(ramFreeMb) || 0)),
       version: version || "unknown",
-      createdAt: Date.now(),
-      currentJobId: null,
+      status: normalizedStatus,
+      lastHeartbeat: now,
+      createdAt: now,
+      updatedAt: now,
+      currentJobIds: [],
+      reservedCpu: 0,
+      reservedRamMb: 0,
+      cooldownUntil: null,
     };
 
     workerRegistry.set(workerId, workerInfo);
     saveWorkers();
+
+    // Kick scheduler in case queued jobs are waiting
+    scheduleJobs("worker-register");
 
     return NextResponse.json({
       success: true,

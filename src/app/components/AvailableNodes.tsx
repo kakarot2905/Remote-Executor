@@ -16,6 +16,9 @@ interface Worker {
   reservedCpu?: number;
   reservedRamMb?: number;
   updatedAt?: number;
+  dockerContainers?: number;
+  dockerCpuUsage?: number;
+  dockerMemoryMb?: number;
 }
 
 export default function AvailableNodes() {
@@ -205,6 +208,14 @@ export default function AvailableNodes() {
                     <span className="text-gray-500">|</span>
                     <span>Jobs: {activeJobs}</span>
                   </div>
+
+                  {(worker.dockerContainers ?? 0) > 0 && (
+                    <div className="text-blue-400 text-1">
+                       CPU:{" "}
+                      {worker.dockerCpuUsage ?? 0}% | RAM:{" "}
+                      {worker.dockerMemoryMb ?? 0} MB
+                    </div>
+                  )}
 
                   <div className="flex justify-between text-gray-500 text-xs">
                     <span>

@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jobRegistry } from "@/lib/registries";
+import { authenticateUser } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
+  // Require authentication
+  const auth = authenticateUser(request);
+  if (!auth.ok) {
+    return auth.response;
+  }
+
   try {
     // Convert Map to array of objects
     const jobs = Array.from(jobRegistry.values()).map((job) => ({

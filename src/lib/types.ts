@@ -245,6 +245,19 @@ export interface WorkerRecord {
   ramFreeMb: number;
 
   // ────────────────────────────────────────────────────────────────────────
+  // DOCKER CONTAINER STATS (Phase 4)
+  // ────────────────────────────────────────────────────────────────────────
+
+  /** Number of active Docker containers running jobs */
+  dockerContainers?: number;
+
+  /** Aggregated CPU usage from all Docker containers (percentage) */
+  dockerCpuUsage?: number;
+
+  /** Aggregated memory usage from all Docker containers (MB) */
+  dockerMemoryMb?: number;
+
+  // ────────────────────────────────────────────────────────────────────────
   // RESOURCE MANAGEMENT (Phase 3)
   // ────────────────────────────────────────────────────────────────────────
 

@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import TerminalInterface from "./TerminalInterface";
+import { clientAuth } from "@/lib/client-auth";
 
 interface Tab {
   id: string;
@@ -9,10 +11,16 @@ interface Tab {
 }
 
 export default function MultiNodeTerminal() {
+  const router = useRouter();
   const [tabs, setTabs] = useState<Tab[]>([{ id: "1", name: "Node 1" }]);
   const [activeTabId, setActiveTabId] = useState("1");
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
+
+  const handleLogout = async () => {
+    await clientAuth.logout();
+    router.push("/login");
+  };
 
   const addTab = () => {
     const newId = Date.now().toString();
@@ -41,7 +49,7 @@ export default function MultiNodeTerminal() {
   const startEdit = (
     tabId: string,
     currentName: string,
-    e: React.MouseEvent
+    e: React.MouseEvent,
   ) => {
     e.stopPropagation();
     setEditingTabId(tabId);
@@ -51,7 +59,7 @@ export default function MultiNodeTerminal() {
   const saveEdit = (tabId: string) => {
     if (editName.trim()) {
       setTabs(
-        tabs.map((t) => (t.id === tabId ? { ...t, name: editName.trim() } : t))
+        tabs.map((t) => (t.id === tabId ? { ...t, name: editName.trim() } : t)),
       );
     }
     setEditingTabId(null);
@@ -61,14 +69,27 @@ export default function MultiNodeTerminal() {
   return (
     <div className="min-h-screen bg-black">
       {/* Main Header */}
-      <div className="bg-gray-900 border-b-2 border-green-400 p-4">
-        <h1 className="text-xl font-bold text-green-400 font-mono">
-          CMD Executor - Multi-Node Remote Command Runner
-        </h1>
-        <p className="text-xs text-green-300 mt-1">
-          Upload zip files and execute commands across multiple distributed
-          worker nodes
-        </p>
+      <div className="bg-gray-900 border-b-2 border-green-400 p-4 flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-green-400 font-mono">
+            CMD Executor - Multi-Node Remote Command Runner
+          </h1>
+          <p className="text-xs text-green-300 mt-1">
+            Upload zip files and execute commands across multiple distributed
+            worker nodes
+          </p>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="text-sm text-green-400 font-mono">
+            User: {clientAuth.getUser()?.username || "Unknown"}
+          </div>
+          <button
+            onClick={handleLogout}
+            className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-mono text-sm rounded transition-colors"
+          >
+            LOGOUT
+          </button>
+        </div>
       </div>
 
       {/* Tab Bar */}

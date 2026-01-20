@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jobRegistry, saveJobs } from "@/lib/registries";
 import { scheduleJobs } from "@/lib/scheduler";
+import { authenticateUser } from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
+  // Require authentication
+  const auth = authenticateUser(request);
+  if (!auth.ok) {
+    return auth.response;
+  }
+
   try {
     const body = await request.json();
     const {
@@ -72,6 +79,12 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
+  // Require authentication
+  const auth = authenticateUser(request);
+  if (!auth.ok) {
+    return auth.response;
+  }
+
   // Return list of all jobs (admin endpoint)
   const jobs = Array.from(jobRegistry.values());
   return NextResponse.json({ jobs, count: jobs.length });

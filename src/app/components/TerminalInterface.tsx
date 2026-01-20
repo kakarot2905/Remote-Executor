@@ -2,6 +2,7 @@
 
 import React, { useRef, useState, useEffect } from "react";
 import AvailableNodes from "./AvailableNodes";
+import { clientAuth } from "@/lib/client-auth";
 
 interface TerminalLog {
   id: string;
@@ -139,6 +140,9 @@ export default function TerminalInterface({
 
       const response = await fetch("/api/execute", {
         method: "POST",
+        headers: {
+          ...clientAuth.getAuthHeaders(),
+        },
         body: formData,
         signal: abortController.signal,
       });
@@ -242,7 +246,9 @@ export default function TerminalInterface({
 
       const poll = async () => {
         try {
-          const response = await fetch(`/api/jobs/status?jobId=${jId}`);
+          const response = await fetch(`/api/jobs/status?jobId=${jId}`, {
+            headers: clientAuth.getAuthHeaders(),
+          });
           if (!response.ok) {
             if (completionAttempts > maxAttempts) {
               addLog("Job status check timeout", "error");
@@ -366,7 +372,10 @@ export default function TerminalInterface({
       if (execId) {
         await fetch("/api/execute", {
           method: "DELETE",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...clientAuth.getAuthHeaders(),
+          },
           body: JSON.stringify({ execId }),
         });
         addLog("Direct execution stopped", "info");
@@ -376,7 +385,10 @@ export default function TerminalInterface({
       if (jobId) {
         await fetch("/api/jobs/cancel", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...clientAuth.getAuthHeaders(),
+          },
           body: JSON.stringify({ jobId }),
         });
         addLog("Job cancelled on worker", "info");

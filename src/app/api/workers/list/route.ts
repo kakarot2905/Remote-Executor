@@ -18,6 +18,9 @@ export async function GET(request: NextRequest) {
       reservedRamMb: worker.reservedRamMb,
       cooldownUntil: worker.cooldownUntil,
       updatedAt: worker.updatedAt,
+      dockerContainers: worker.dockerContainers,
+      dockerCpuUsage: worker.dockerCpuUsage,
+      dockerMemoryMb: worker.dockerMemoryMb,
     }));
 
     return NextResponse.json({

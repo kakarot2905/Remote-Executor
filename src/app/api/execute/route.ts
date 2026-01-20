@@ -5,6 +5,8 @@ import path from "path";
 import fs from "fs";
 import os from "os";
 import { scheduleJobs } from "@/lib/scheduler";
+import { authenticateUser } from "@/lib/auth";
+import { uploadFile } from "@/lib/gridfs";
 
 // Track active processes by execution id so we can stop them on demand
 const activeProcesses = new Map<string, ReturnType<typeof spawn>>();
@@ -14,6 +16,12 @@ const activeProcesses = new Map<string, ReturnType<typeof spawn>>();
 // - Mode 2: Distributed execution via workers (Phase 2)
 
 export async function POST(request: NextRequest) {
+  // Require authentication
+  const auth = authenticateUser(request);
+  if (!auth.ok) {
+    return auth.response;
+  }
+
   try {
     const formData = await request.formData();
     const zipFile = formData.get("file") as File;
@@ -29,7 +37,11 @@ export async function POST(request: NextRequest) {
 
     // For distributed mode, create a job instead of executing locally
     if (mode === "distributed") {
-      return handleDistributedExecution(zipFile, commands);
+      return handleDistributedExecution(
+        zipFile,
+        commands,
+        auth.user.username || "anonymous",
+      );
     }
 
     // Phase 1: Direct execution on server (fallback)
@@ -254,30 +266,18 @@ export async function DELETE(request: NextRequest) {
 async function handleDistributedExecution(
   zipFile: File,
   commands: string,
+  username: string,
 ): Promise<NextResponse> {
   try {
-    // Save the uploaded file temporarily
-    const tempDir = path.join(os.tmpdir(), `cmd-executor-upload-${Date.now()}`);
-    if (!fs.existsSync(tempDir)) {
-      fs.mkdirSync(tempDir, { recursive: true });
-    }
+    // Upload file to GridFS instead of file system
+    const buffer = Buffer.from(await zipFile.arrayBuffer());
+    const uploadResult = await uploadFile(buffer, zipFile.name, zipFile.type, {
+      uploadedBy: username,
+      uploadedAt: new Date(),
+    });
 
-    const buffer = await zipFile.arrayBuffer();
-    const zipPath = path.join(tempDir, zipFile.name);
-    fs.writeFileSync(zipPath, Buffer.from(buffer));
-
-    // Create a public file URL (the worker will download from this URL)
-    // For now, we'll store files in a public uploads directory
-    const uploadDir = path.join(process.cwd(), "public", "uploads");
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-
-    const publicFileName = `${Date.now()}-${zipFile.name}`;
-    const publicFilePath = path.join(uploadDir, publicFileName);
-    fs.copyFileSync(zipPath, publicFilePath);
-
-    const fileUrl = `/uploads/${publicFileName}`;
+    // Use GridFS fileId as reference
+    const fileUrl = `/api/files/download/${uploadResult.fileId}`;
     const jobId = `job-${Date.now()}-${Math.random()
       .toString(36)
       .substr(2, 9)}`;
@@ -313,15 +313,6 @@ async function handleDistributedExecution(
     saveJobs();
     scheduleJobs("distributed-upload");
 
-    // Clean up temp upload directory
-    setTimeout(() => {
-      try {
-        fs.rmSync(tempDir, { recursive: true, force: true });
-      } catch (e) {
-        console.error("Cleanup error:", e);
-      }
-    }, 1000);
-
     // Return job ID to client for polling
     return NextResponse.json(
       {
@@ -333,10 +324,11 @@ async function handleDistributedExecution(
       },
       { headers: { "X-Job-Id": jobId } },
     );
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: error.message || "Failed to create distributed job" },
-      { status: 500 },
-    );
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Failed to create distributed job";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

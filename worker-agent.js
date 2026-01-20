@@ -25,11 +25,22 @@ import { createWriteStream } from "fs";
 import { mkdir, readFile, writeFile, rm, access, constants as fsConstants } from "fs/promises";
 import { homedir, cpus, freemem, totalmem, type as osType } from "os";
 import { join, resolve } from "path";
-import { randomUUID } from "crypto";
+import { randomUUID, createHmac } from "crypto";
 import https from "https";
 import http from "http";
 import { readFileSync, existsSync } from "fs";
 import AdmZip from "adm-zip";
+import jwt from "jsonwebtoken";
+import dotenv from "dotenv";
+
+// Load .env file at startup
+dotenv.config();
+
+// Verify environment was loaded
+console.log("[STARTUP] Environment configuration:");
+console.log(`[STARTUP] WORKER_TOKEN_SECRET: ${process.env.WORKER_TOKEN_SECRET ? "✓ SET" : "✗ NOT SET (using default)"}`);
+console.log(`[STARTUP] SERVER_URL (env): ${process.env.SERVER_URL || "not set"}`);
+console.log(`[STARTUP] WORKER_ID (env): ${process.env.WORKER_ID || "not set"}`);
 
 // ============================================================================
 // Configuration
@@ -46,6 +57,7 @@ const SERVER_URL =
 const WORKER_ID = process.env.WORKER_ID || `worker-${randomUUID().slice(0, 8)}`;
 const WORKER_VERSION = "2.0.0-docker"; // Docker-enabled worker
 const HOSTNAME = process.env.HOSTNAME || "unknown-host";
+const WORKER_TOKEN_SECRET = process.env.WORKER_TOKEN_SECRET || "dev-worker-token-secret";
 const HEARTBEAT_INTERVAL = 10000; // 10 seconds
 const JOB_POLL_INTERVAL = 5000; // 5 seconds
 const WORK_DIR = join(homedir(), ".cmd-executor-worker");
@@ -410,8 +422,7 @@ const getDockerContainerStats = () => {
     try {
         // Get stats for ALL containers in one command - much more efficient!
         const statsCmd = 'docker stats --no-stream';
-        log(`[Docker] Running: ${statsCmd}`, "INFO");
-        
+
         const statsOutput = execSync(statsCmd, {
             encoding: 'utf8',
             stdio: ['pipe', 'pipe', 'pipe'],
@@ -428,17 +439,8 @@ const getDockerContainerStats = () => {
             };
         }
 
-        // Log raw output for debugging
-        log(`========== RAW DOCKER STATS OUTPUT ==========`, "INFO");
         const outputLines = statsOutput.split('\n');
-        outputLines.forEach((line, index) => {
-            if (line.trim()) {
-                log(`Line ${index + 1}: ${line}`, "INFO");
-            }
-        });
-        log(`========== END RAW OUTPUT (${outputLines.length} lines) ==========`, "INFO");
 
-        // Parse output: first line is header, rest are data rows
         // Filter for only cmd-exec containers
         let totalCpuUsage = 0;
         let totalMemoryMb = 0;
@@ -448,30 +450,28 @@ const getDockerContainerStats = () => {
         for (let i = 1; i < outputLines.length; i++) {
             const line = outputLines[i].trim();
             if (!line || !line.includes('cmd-exec')) continue; // Skip non-cmd-exec containers
-            
+
             cmdExecCount++;
-            log(`[Docker] Processing cmd-exec container line: ${line}`, "INFO");
-            
+
             // Split by whitespace: CONTAINER_ID NAME CPU% MEM_USAGE/LIMIT MEM% NET_IO BLOCK_IO PIDS
             const parts = line.split(/\s+/);
-            log(`[Docker] Parts (${parts.length}): ${parts.slice(0, 10).join(' | ')}`, "INFO");
-            
+
             if (parts.length >= 4) {
                 // CPU % is at index 2 (e.g., "0.02%")
                 const cpuStr = parts[2].replace('%', '');
                 const cpu = parseFloat(cpuStr);
-                
+
                 if (!isNaN(cpu)) {
                     totalCpuUsage += cpu;
                     log(`[Docker] ✓ CPU: ${cpu}% (container: ${parts[0].slice(0, 12)})`, "INFO");
                 } else {
                     log(`[Docker] ✗ Invalid CPU: ${parts[2]}`, "WARN");
                 }
-                
+
                 // MEM USAGE is at index 3 (e.g., "3.996MiB" from "3.996MiB / 512MiB")
                 const memUsageStr = parts[3];
                 const memMatch = memUsageStr.match(/^([\d.]+)(B|KiB|MiB|GiB)/i);
-                
+
                 if (memMatch) {
                     let mem = parseFloat(memMatch[1]);
                     const unit = memMatch[2].toUpperCase();
@@ -485,7 +485,7 @@ const getDockerContainerStats = () => {
                     const memMb = Math.round(mem);
                     totalMemoryMb += memMb;
                     log(`[Docker] ✓ Memory: ${memMb}MB (container: ${parts[0].slice(0, 12)})`, "INFO");
-                    
+
                     containers.push({
                         id: parts[0].slice(0, 12),
                         name: parts[1],
@@ -498,10 +498,8 @@ const getDockerContainerStats = () => {
             }
         }
 
-        log(`[Docker] ═══ SUMMARY ═══`, "SUCCESS");
-        log(`[Docker] cmd-exec containers: ${cmdExecCount}`, "SUCCESS");
-        log(`[Docker] Total CPU: ${totalCpuUsage.toFixed(2)}%`, "SUCCESS");
-        log(`[Docker] Total Memory: ${totalMemoryMb}MB`, "SUCCESS");
+        log(`[Docker] ✔ Containers: ${cmdExecCount} | CPU: ${totalCpuUsage.toFixed(2)}% | RAM: ${totalMemoryMb} MB`, "SUCCESS");
+
 
         return {
             containerCount: cmdExecCount,
@@ -580,7 +578,22 @@ const httpRequest = (method, url, data) => {
     });
 };
 
-const downloadFile = (url, filePath) => {
+/**
+ * Generate JWT token for worker authentication
+ */
+const generateWorkerToken = (workerId, hostname) => {
+    return jwt.sign(
+        {
+            workerId,
+            hostname,
+            type: "worker"
+        },
+        WORKER_TOKEN_SECRET,
+        { expiresIn: "24h" }
+    );
+};
+
+const downloadFile = (url, filePath, workerToken) => {
     return new Promise((resolve, reject) => {
         const isHttps = url.startsWith("https");
         const client = isHttps ? https : http;
@@ -592,6 +605,8 @@ const downloadFile = (url, filePath) => {
             path: urlObj.pathname + urlObj.search,
             headers: {
                 "User-Agent": `cmd-executor-worker/${WORKER_VERSION}`,
+                "Authorization": `Bearer ${workerToken}`,
+                "X-Worker-Token": workerToken,
             },
         };
 
@@ -635,6 +650,9 @@ class WorkerAgent {
                 : Math.max(1, Math.floor(cpus().length / 2));
         this.heartbeatTimer = null;
         this.pollTimer = null;
+        // Generate worker authentication token
+        this.workerToken = generateWorkerToken(workerId, HOSTNAME);
+        log(`Generated worker token for ${workerId}`, "INFO");
     }
 
     async start() {
@@ -805,7 +823,7 @@ class WorkerAgent {
                 ? job.fileUrl
                 : `${this.serverUrl}${job.fileUrl}`;
 
-            await downloadFile(fileUrl, zipPath);
+            await downloadFile(fileUrl, zipPath, this.workerToken);
             log(`File downloaded`, "SUCCESS");
 
             // Extract zip

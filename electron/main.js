@@ -35,8 +35,6 @@ function parseWorkerHeartbeat(data) {
 // Get Docker container stats from worker process ONLY
 // This ensures we see the raw output from worker-agent.js, not from main.js
 async function getDockerContainerStats() {
-    console.log('[MAIN] Returning stats from worker-agent.js only');
-    console.log('[MAIN] Worker stats:', workerStats);
 
     // Always return stats from worker (even if old/empty)
     // This ensures we're getting data from worker-agent.js, not querying Docker ourselves
@@ -63,7 +61,9 @@ function createWindow() {
         icon: path.join(__dirname, 'assets', 'icon.png'),
     });
 
-    mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+    // Check if user is authenticated, show login page if not
+    const hasToken = false; // Will be checked via IPC in renderer
+    mainWindow.loadFile(path.join(__dirname, 'renderer', 'login.html'));
 
     // Open DevTools in development
     if (process.env.NODE_ENV === 'development') {

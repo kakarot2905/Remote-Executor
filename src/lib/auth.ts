@@ -60,7 +60,16 @@ export function authenticateWorker(
     const bearer = extractBearer(req) || "";
     const token = headerToken || bearer;
     if (!token) throw new Error("Missing worker token");
+
+    console.log("[AUTH] Worker auth attempt - token length:", token.length);
+
     const decoded = jwt.verify(token, config.workerTokenSecret) as JwtPayload;
+    console.log("[AUTH] Worker token decoded:", {
+      workerId: decoded.workerId,
+      hostname: decoded.hostname,
+      type: decoded.type,
+    });
+
     if (!decoded.workerId) throw new Error("workerId missing in token");
     return {
       ok: true,
@@ -68,6 +77,7 @@ export function authenticateWorker(
     };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Invalid token";
+    console.error("[AUTH] Worker authentication failed:", message);
     return {
       ok: false,
       response: NextResponse.json(
@@ -88,11 +98,7 @@ export async function rateLimit(
 ): Promise<{ ok: true } | { ok: false; response: NextResponse }> {
   const redis = getRedis();
   const redisKey = `ratelimit:${key}`;
-  const results = await redis
-    .multi()
-    .incr(redisKey)
-    .pttl(redisKey)
-    .exec();
+  const results = await redis.multi().incr(redisKey).pttl(redisKey).exec();
 
   if (!results) {
     throw new Error("Redis multi exec failed");

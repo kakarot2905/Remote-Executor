@@ -67,3 +67,30 @@ export const config = {
   schedulerLockKey: process.env.SCHEDULER_LOCK_KEY || "scheduler:lock",
   schedulerLockTtlMs: toNumber(process.env.SCHEDULER_LOCK_TTL_MS, 5_000),
 };
+
+// Log loaded configuration once (masking secrets)
+const mask = (value: string, visible: number = 4) => {
+  if (!value) return "";
+  const prefix = value.slice(0, visible);
+  const masked = "*".repeat(Math.max(0, value.length - visible));
+  return `${prefix}${masked}`;
+};
+
+console.log("[config] Loaded", {
+  mongodbUri: config.mongodbUri,
+  mongodbDb: config.mongodbDb,
+  redisUrl: config.redisUrl,
+  jwtSecret: mask(config.jwtSecret),
+  jwtExpiresIn: config.jwtExpiresIn,
+  workerTokenSecret: mask(config.workerTokenSecret),
+  oidcIssuer: config.oidcIssuer,
+  oidcClientId: mask(config.oidcClientId),
+  oidcClientSecret: mask(config.oidcClientSecret),
+  oidcRedirectUri: config.oidcRedirectUri,
+  allowedOrigins: config.allowedOrigins,
+  enforceTls: config.enforceTls,
+  rateLimitWindowMs: config.rateLimitWindowMs,
+  rateLimitMax: config.rateLimitMax,
+  schedulerLockKey: config.schedulerLockKey,
+  schedulerLockTtlMs: config.schedulerLockTtlMs,
+});

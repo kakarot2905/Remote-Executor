@@ -38,9 +38,10 @@ import AdmZip from "adm-zip";
 const args = process.argv.slice(2);
 const serverIndex = args.indexOf("--server");
 const SERVER_URL =
-    serverIndex !== -1 && args[serverIndex + 1]
+    process.env.SERVER_URL ||  // Environment variable (highest priority for deployment)
+    (serverIndex !== -1 && args[serverIndex + 1]
         ? args[serverIndex + 1]
-        : "http://localhost:3000";
+        : "http://localhost:3000");  // Default fallback
 
 const WORKER_ID = process.env.WORKER_ID || `worker-${randomUUID().slice(0, 8)}`;
 const WORKER_VERSION = "2.0.0-docker"; // Docker-enabled worker
@@ -254,12 +255,10 @@ class DockerExecutor {
                 if (jobId && serverUrl) {
                     try {
                         const checkUrl = `${serverUrl}/api/jobs/check-cancel?jobId=${jobId}`;
-                        log(`[Docker] Checking cancellation status: ${checkUrl}`, "INFO");
                         const response = await httpRequest(
                             "GET",
                             checkUrl
                         );
-                        log(`[Docker] Cancel check response: ${response.statusCode} - ${response.body}`, "INFO");
                         if (response.statusCode === 200) {
                             const data = JSON.parse(response.body);
                             if (data.success && data.cancelRequested) {
@@ -401,6 +400,124 @@ const collectSystemStats = () => {
         ramFreeMb: Math.round(freemem() / 1024 / 1024),
         osType: osType(),
     };
+};
+
+/**
+ * Get Docker container stats for active job containers
+ * Returns aggregated CPU and memory usage for all running cmd-exec containers
+ */
+const getDockerContainerStats = () => {
+    try {
+        // Get stats for ALL containers in one command - much more efficient!
+        const statsCmd = 'docker stats --no-stream';
+        log(`[Docker] Running: ${statsCmd}`, "INFO");
+        
+        const statsOutput = execSync(statsCmd, {
+            encoding: 'utf8',
+            stdio: ['pipe', 'pipe', 'pipe'],
+            timeout: 5000
+        }).trim();
+
+        if (!statsOutput || statsOutput.length === 0) {
+            log(`[Docker] Empty output from docker stats`, "WARN");
+            return {
+                containerCount: 0,
+                cpuUsage: 0,
+                memoryMb: 0,
+                containers: []
+            };
+        }
+
+        // Log raw output for debugging
+        log(`========== RAW DOCKER STATS OUTPUT ==========`, "INFO");
+        const outputLines = statsOutput.split('\n');
+        outputLines.forEach((line, index) => {
+            if (line.trim()) {
+                log(`Line ${index + 1}: ${line}`, "INFO");
+            }
+        });
+        log(`========== END RAW OUTPUT (${outputLines.length} lines) ==========`, "INFO");
+
+        // Parse output: first line is header, rest are data rows
+        // Filter for only cmd-exec containers
+        let totalCpuUsage = 0;
+        let totalMemoryMb = 0;
+        const containers = [];
+        let cmdExecCount = 0;
+
+        for (let i = 1; i < outputLines.length; i++) {
+            const line = outputLines[i].trim();
+            if (!line || !line.includes('cmd-exec')) continue; // Skip non-cmd-exec containers
+            
+            cmdExecCount++;
+            log(`[Docker] Processing cmd-exec container line: ${line}`, "INFO");
+            
+            // Split by whitespace: CONTAINER_ID NAME CPU% MEM_USAGE/LIMIT MEM% NET_IO BLOCK_IO PIDS
+            const parts = line.split(/\s+/);
+            log(`[Docker] Parts (${parts.length}): ${parts.slice(0, 10).join(' | ')}`, "INFO");
+            
+            if (parts.length >= 4) {
+                // CPU % is at index 2 (e.g., "0.02%")
+                const cpuStr = parts[2].replace('%', '');
+                const cpu = parseFloat(cpuStr);
+                
+                if (!isNaN(cpu)) {
+                    totalCpuUsage += cpu;
+                    log(`[Docker] ✓ CPU: ${cpu}% (container: ${parts[0].slice(0, 12)})`, "INFO");
+                } else {
+                    log(`[Docker] ✗ Invalid CPU: ${parts[2]}`, "WARN");
+                }
+                
+                // MEM USAGE is at index 3 (e.g., "3.996MiB" from "3.996MiB / 512MiB")
+                const memUsageStr = parts[3];
+                const memMatch = memUsageStr.match(/^([\d.]+)(B|KiB|MiB|GiB)/i);
+                
+                if (memMatch) {
+                    let mem = parseFloat(memMatch[1]);
+                    const unit = memMatch[2].toUpperCase();
+
+                    // Convert to MB
+                    if (unit === 'KIB') mem /= 1024;
+                    else if (unit === 'GIB') mem *= 1024;
+                    else if (unit === 'B') mem /= (1024 * 1024);
+                    // MIB stays as-is
+
+                    const memMb = Math.round(mem);
+                    totalMemoryMb += memMb;
+                    log(`[Docker] ✓ Memory: ${memMb}MB (container: ${parts[0].slice(0, 12)})`, "INFO");
+                    
+                    containers.push({
+                        id: parts[0].slice(0, 12),
+                        name: parts[1],
+                        cpu,
+                        memory: memUsageStr
+                    });
+                } else {
+                    log(`[Docker] ✗ Invalid MEM: ${memUsageStr}`, "WARN");
+                }
+            }
+        }
+
+        log(`[Docker] ═══ SUMMARY ═══`, "SUCCESS");
+        log(`[Docker] cmd-exec containers: ${cmdExecCount}`, "SUCCESS");
+        log(`[Docker] Total CPU: ${totalCpuUsage.toFixed(2)}%`, "SUCCESS");
+        log(`[Docker] Total Memory: ${totalMemoryMb}MB`, "SUCCESS");
+
+        return {
+            containerCount: cmdExecCount,
+            cpuUsage: Number(totalCpuUsage.toFixed(2)),
+            memoryMb: totalMemoryMb,
+            containers
+        };
+    } catch (error) {
+        log(`[Docker] Error getting stats: ${error.message}`, "ERROR");
+        return {
+            containerCount: 0,
+            cpuUsage: 0,
+            memoryMb: 0,
+            containers: []
+        };
+    }
 };
 
 // ============================================================================
@@ -598,6 +715,8 @@ class WorkerAgent {
     async sendHeartbeat() {
         try {
             const stats = collectSystemStats();
+            log("Collecting docker stats...", "INFO");
+            const dockerStats = getDockerContainerStats();
             const agentStatus = this.activeJobs.size > 0 ? "BUSY" : "IDLE";
             const response = await httpRequest(
                 "POST",
@@ -608,12 +727,19 @@ class WorkerAgent {
                     ramFreeMb: stats.ramFreeMb,
                     ramTotalMb: stats.ramTotalMb,
                     status: agentStatus,
+                    // Include Docker container stats
+                    dockerContainers: dockerStats.containerCount,
+                    dockerCpuUsage: dockerStats.cpuUsage,
+                    dockerMemoryMb: dockerStats.memoryMb,
                 }
             );
 
             if (response.statusCode !== 200) {
                 log(`Heartbeat failed: HTTP ${response.statusCode}`, "WARN");
             }
+
+            // Log Docker container stats for Electron UI to capture
+            log(`[WORKER-STATS] dockerContainers=${dockerStats.containerCount} dockerCpuUsage=${dockerStats.cpuUsage} dockerMemoryMb=${dockerStats.memoryMb}`, "INFO");
         } catch (e) {
             log(`Heartbeat error: ${e}`, "WARN");
         }

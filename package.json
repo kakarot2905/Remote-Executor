@@ -4,13 +4,41 @@
   "description": "Distributed Command Executor with Worker Nodes (Phase 2)",
   "private": true,
   "type": "module",
+  "main": "electron/main.js",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "worker": "node worker-agent.js",
-    "quickstart": "node quickstart.js"
+    "quickstart": "node quickstart.js",
+    "electron": "electron electron/main.js",
+    "electron:dev": "NODE_ENV=development electron electron/main.js",
+    "electron:build": "electron-builder"
+  },
+  "build": {
+    "appId": "com.cmdexecutor.worker",
+    "productName": "CMD Executor Worker",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "electron/**/*",
+      "worker-agent.js",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "electron/assets/icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "electron/assets/icon.icns"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "electron/assets/icon.png"
+    }
   },
   "dependencies": {
     "adm-zip": "^0.5.16",
@@ -23,6 +51,8 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "electron": "^28.1.0",
+    "electron-builder": "^24.9.1",
     "eslint": "^9",
     "eslint-config-next": "16.1.2",
     "tailwindcss": "^4",

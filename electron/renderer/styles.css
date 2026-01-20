@@ -40,8 +40,8 @@
   --color-shadow: rgba(0, 217, 255, 0.1);
 
   /* Typography */
-  --font-primary: 'Courier New', Courier, monospace;
-  --font-secondary: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-primary: "Courier New", Courier, monospace;
+  --font-secondary: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 
   /* Sizing */
   --border-radius: 6px;
@@ -56,7 +56,12 @@
 
 body {
   font-family: var(--font-primary);
-  background: linear-gradient(135deg, var(--color-bg-primary) 0%, var(--color-bg-secondary) 50%, var(--color-bg-accent) 100%);
+  background: linear-gradient(
+    135deg,
+    var(--color-bg-primary) 0%,
+    var(--color-bg-secondary) 50%,
+    var(--color-bg-accent) 100%
+  );
   color: var(--color-text-primary);
   line-height: 1.6;
   min-height: 100vh;
@@ -65,28 +70,31 @@ body {
 }
 
 body::before {
-  content: '';
+  content: "";
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: 
-    repeating-linear-gradient(
-      0deg,
-      rgba(0, 217, 255, 0.03) 0px,
-      rgba(0, 217, 255, 0.03) 2px,
-      transparent 2px,
-      transparent 4px
-    );
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 217, 255, 0.03) 0px,
+    rgba(0, 217, 255, 0.03) 2px,
+    transparent 2px,
+    transparent 4px
+  );
   pointer-events: none;
   z-index: 1;
   animation: scanlines 8s linear infinite;
 }
 
 @keyframes scanlines {
-  0% { transform: translateY(0); }
-  100% { transform: translateY(4px); }
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(4px);
+  }
 }
 
 .container {
@@ -111,7 +119,12 @@ body::before {
 
 .circuit-line {
   position: absolute;
-  background: linear-gradient(90deg, transparent, var(--color-border-glow), transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--color-border-glow),
+    transparent
+  );
   opacity: 0;
   animation: flowLine 4s ease-in-out infinite;
 }
@@ -138,8 +151,15 @@ body::before {
 }
 
 @keyframes flowLine {
-  0%, 100% { opacity: 0; transform: scaleX(0); }
-  50% { opacity: 0.5; transform: scaleX(1); }
+  0%,
+  100% {
+    opacity: 0;
+    transform: scaleX(0);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scaleX(1);
+  }
 }
 
 /* ============================================================================
@@ -149,11 +169,15 @@ body::before {
 .header {
   margin-bottom: 40px;
   padding: 30px;
-  background: linear-gradient(135deg, rgba(10, 14, 39, 0.8), rgba(21, 27, 63, 0.8));
+  background: linear-gradient(
+    135deg,
+    rgba(10, 14, 39, 0.8),
+    rgba(21, 27, 63, 0.8)
+  );
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius);
   backdrop-filter: blur(10px);
-  box-shadow: 
+  box-shadow:
     0 0 30px rgba(0, 217, 255, 0.1),
     inset 0 0 30px rgba(168, 181, 209, 0.05);
   position: relative;
@@ -161,19 +185,28 @@ body::before {
 }
 
 .header::before {
-  content: '';
+  content: "";
   position: absolute;
   top: 0;
   left: -100%;
   width: 200%;
   height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(0, 217, 255, 0.1), transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(0, 217, 255, 0.1),
+    transparent
+  );
   animation: shimmer 3s infinite;
 }
 
 @keyframes shimmer {
-  0% { left: -100%; }
-  100% { left: 100%; }
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 100%;
+  }
 }
 
 .header-content {
@@ -199,15 +232,26 @@ body::before {
 }
 
 @keyframes pulse-glow {
-  0%, 100% { opacity: 1; filter: drop-shadow(0 0 10px var(--color-neon-cyan)); }
-  50% { opacity: 0.7; filter: drop-shadow(0 0 20px var(--color-neon-cyan)); }
+  0%,
+  100% {
+    opacity: 1;
+    filter: drop-shadow(0 0 10px var(--color-neon-cyan));
+  }
+  50% {
+    opacity: 0.7;
+    filter: drop-shadow(0 0 20px var(--color-neon-cyan));
+  }
 }
 
 .logo-text h1 {
   font-size: 2rem;
   font-weight: 800;
   letter-spacing: 3px;
-  background: linear-gradient(135deg, var(--color-neon-cyan), var(--color-neon-purple));
+  background: linear-gradient(
+    135deg,
+    var(--color-neon-cyan),
+    var(--color-neon-purple)
+  );
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -262,7 +306,11 @@ body::before {
 
 .panel {
   margin-bottom: 25px;
-  background: linear-gradient(135deg, rgba(21, 27, 63, 0.5), rgba(26, 34, 85, 0.5));
+  background: linear-gradient(
+    135deg,
+    rgba(21, 27, 63, 0.5),
+    rgba(26, 34, 85, 0.5)
+  );
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius);
   backdrop-filter: blur(10px);
@@ -301,7 +349,7 @@ body::before {
 }
 
 .panel-header::after {
-  content: '';
+  content: "";
   position: absolute;
   bottom: 0;
   left: 0;
@@ -313,8 +361,13 @@ body::before {
 }
 
 @keyframes borderGlow {
-  0%, 100% { opacity: 0; }
-  50% { opacity: 1; }
+  0%,
+  100% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .panel-icon {
@@ -343,8 +396,15 @@ body::before {
 }
 
 @keyframes glow {
-  0%, 100% { opacity: 0.3; transform: scale(1); }
-  50% { opacity: 0.7; transform: scale(1.2); }
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.2);
+  }
 }
 
 .panel-body {
@@ -395,13 +455,25 @@ body::before {
 }
 
 @keyframes pulse-dot {
-  0%, 100% { opacity: 0.8; }
-  50% { opacity: 1; }
+  0%,
+  100% {
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 @keyframes pulse-success {
-  0%, 100% { opacity: 1; box-shadow: 0 0 20px rgba(57, 255, 20, 0.6); }
-  50% { opacity: 0.8; box-shadow: 0 0 30px rgba(57, 255, 20, 0.8); }
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 20px rgba(57, 255, 20, 0.6);
+  }
+  50% {
+    opacity: 0.8;
+    box-shadow: 0 0 30px rgba(57, 255, 20, 0.8);
+  }
 }
 
 .status-info {
@@ -575,7 +647,9 @@ body::before {
   outline: none;
   border-color: var(--color-neon-cyan);
   background: rgba(10, 14, 39, 0.8);
-  box-shadow: 0 0 20px rgba(0, 217, 255, 0.2), inset 0 0 10px rgba(0, 217, 255, 0.05);
+  box-shadow:
+    0 0 20px rgba(0, 217, 255, 0.2),
+    inset 0 0 10px rgba(0, 217, 255, 0.05);
 }
 
 .form-input:focus + .input-cursor {
@@ -599,8 +673,15 @@ body::before {
 }
 
 @keyframes cursor-blink {
-  0%, 49%, 100% { opacity: 1; }
-  50%, 99% { opacity: 0; }
+  0%,
+  49%,
+  100% {
+    opacity: 1;
+  }
+  50%,
+  99% {
+    opacity: 0;
+  }
 }
 
 .form-helper {
@@ -653,7 +734,7 @@ body::before {
 }
 
 .checkbox-input:checked + .checkbox-visual::after {
-  content: '✓';
+  content: "✓";
   color: white;
   font-weight: 700;
   font-size: 0.9rem;
@@ -694,13 +775,18 @@ body::before {
 }
 
 .btn::before {
-  content: '';
+  content: "";
   position: absolute;
   top: 0;
   left: -100%;
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.2),
+    transparent
+  );
   transition: left var(--transition-normal);
 }
 
@@ -724,7 +810,11 @@ body::before {
 
 /* Primary Button */
 .btn-primary {
-  background: linear-gradient(135deg, var(--color-neon-cyan), var(--color-neon-blue));
+  background: linear-gradient(
+    135deg,
+    var(--color-neon-cyan),
+    var(--color-neon-blue)
+  );
   color: var(--color-bg-primary);
   border-color: var(--color-neon-cyan);
   box-shadow: 0 0 20px rgba(0, 217, 255, 0.3);
@@ -751,7 +841,9 @@ body::before {
 
 .btn-secondary:hover:not(:disabled) {
   background: rgba(0, 217, 255, 0.1);
-  box-shadow: inset 0 0 15px rgba(0, 217, 255, 0.2), 0 0 20px rgba(0, 217, 255, 0.3);
+  box-shadow:
+    inset 0 0 15px rgba(0, 217, 255, 0.2),
+    0 0 20px rgba(0, 217, 255, 0.3);
   transform: translateY(-2px);
 }
 
@@ -899,8 +991,13 @@ body::before {
 }
 
 @keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
 }
 
 .output-line {
@@ -961,7 +1058,9 @@ body::before {
   font-weight: 600;
   font-family: var(--font-secondary);
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
-  animation: slideInRight 0.3s ease-out, slideOutRight 0.3s ease-out 3.7s forwards;
+  animation:
+    slideInRight 0.3s ease-out,
+    slideOutRight 0.3s ease-out 3.7s forwards;
   pointer-events: auto;
   max-width: 400px;
   word-wrap: break-word;
@@ -1051,8 +1150,13 @@ body::before {
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 1; }
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 /* ============================================================================

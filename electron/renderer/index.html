@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'"
+    />
+    <title>CMD Executor Worker Agent</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <!-- Animated Background -->
+      <div class="circuit-background">
+        <div class="circuit-line circuit-1"></div>
+        <div class="circuit-line circuit-2"></div>
+        <div class="circuit-line circuit-3"></div>
+      </div>
+
+      <!-- Header -->
+      <header class="header">
+        <div class="header-content">
+          <div class="logo-section">
+            <div class="logo-icon">⚡</div>
+            <div class="logo-text">
+              <h1 class="title">CMD EXECUTOR</h1>
+              <p class="subtitle">Distributed Command Execution System</p>
+            </div>
+          </div>
+          <div class="header-stats">
+            <div class="stat-badge">
+              <span class="stat-label">v2.0.0</span>
+              <span class="stat-value">DOCKER</span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main class="main-content">
+        <!-- Worker Status Panel -->
+        <section class="panel status-panel">
+          <div class="panel-header">
+            <span class="panel-icon">⬤</span>
+            <h2 class="panel-title">WORKER STATUS</h2>
+            <div class="panel-glow"></div>
+          </div>
+          <div class="panel-body">
+            <div class="status-display">
+              <div class="status-indicator">
+                <div class="status-dot" id="statusDot"></div>
+                <div class="status-info">
+                  <span class="status-text" id="statusText">IDLE</span>
+                  <span class="status-subtext" id="pidInfo"></span>
+                </div>
+              </div>
+              <div class="status-metrics">
+                <div class="metric">
+                  <span class="metric-label">CPU</span>
+                  <span class="metric-value" id="cpuMetric">--</span>
+                </div>
+                <div class="metric">
+                  <span class="metric-label">MEM</span>
+                  <span class="metric-value" id="memMetric">--</span>
+                </div>
+                <div class="metric">
+                  <span class="metric-label">JOBS</span>
+                  <span class="metric-value" id="jobsMetric">--</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Configuration Panel -->
+        <section class="panel config-panel">
+          <div class="panel-header">
+            <span class="panel-icon">⚙️</span>
+            <h2 class="panel-title">CONFIGURATION</h2>
+            <div class="panel-glow"></div>
+          </div>
+          <div class="panel-body">
+            <form id="configForm" class="form">
+              <!-- Connection Settings -->
+              <fieldset class="form-section">
+                <legend class="section-title">
+                  <span class="section-icon">🔗</span>
+                  CONNECTION SETTINGS
+                </legend>
+                <div class="form-group">
+                  <label for="serverUrl" class="form-label">
+                    Server URL
+                    <span class="tooltip-icon" title="Central server endpoint"
+                      >?</span
+                    >
+                  </label>
+                  <div class="input-wrapper">
+                    <span class="input-prefix">⚓</span>
+                    <input
+                      type="text"
+                      id="serverUrl"
+                      name="serverUrl"
+                      class="form-input"
+                      placeholder="http://localhost:3000"
+                      required
+                    />
+                    <span class="input-cursor"></span>
+                  </div>
+                </div>
+
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="workerId" class="form-label">
+                      Worker ID
+                      <span
+                        class="tooltip-icon"
+                        title="Unique worker identifier"
+                        >?</span
+                      >
+                    </label>
+                    <div class="input-wrapper">
+                      <span class="input-prefix">#</span>
+                      <input
+                        type="text"
+                        id="workerId"
+                        name="workerId"
+                        class="form-input"
+                        placeholder="Auto-generated"
+                      />
+                      <span class="input-cursor"></span>
+                    </div>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="hostname" class="form-label">
+                      Hostname
+                      <span class="tooltip-icon" title="Custom hostname"
+                        >?</span
+                      >
+                    </label>
+                    <div class="input-wrapper">
+                      <span class="input-prefix">📍</span>
+                      <input
+                        type="text"
+                        id="hostname"
+                        name="hostname"
+                        class="form-input"
+                        placeholder="Auto-detected"
+                      />
+                      <span class="input-cursor"></span>
+                    </div>
+                  </div>
+                </div>
+              </fieldset>
+
+              <!-- Docker Configuration -->
+              <fieldset class="form-section">
+                <legend class="section-title">
+                  <span class="section-icon">🐳</span>
+                  DOCKER SETTINGS
+                </legend>
+                <div class="form-group checkbox-group">
+                  <label class="checkbox-label">
+                    <input
+                      type="checkbox"
+                      id="enableDocker"
+                      name="enableDocker"
+                      class="checkbox-input"
+                      checked
+                    />
+                    <span class="checkbox-visual"></span>
+                    <span class="checkbox-text">Enable Docker Isolation</span>
+                    <span
+                      class="tooltip-icon"
+                      title="Run in isolated containers"
+                      >?</span
+                    >
+                  </label>
+                </div>
+
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="dockerTimeout" class="form-label">
+                      Timeout (ms)
+                      <span class="tooltip-icon" title="Max execution time"
+                        >?</span
+                      >
+                    </label>
+                    <div class="input-wrapper">
+                      <span class="input-prefix">⏱️</span>
+                      <input
+                        type="number"
+                        id="dockerTimeout"
+                        name="dockerTimeout"
+                        class="form-input"
+                        value="300000"
+                        min="1000"
+                        step="1000"
+                      />
+                      <span class="input-cursor"></span>
+                    </div>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="dockerMemoryLimit" class="form-label">
+                      Memory Limit
+                      <span class="tooltip-icon" title="e.g., 512m, 1g">?</span>
+                    </label>
+                    <div class="input-wrapper">
+                      <span class="input-prefix">💾</span>
+                      <input
+                        type="text"
+                        id="dockerMemoryLimit"
+                        name="dockerMemoryLimit"
+                        class="form-input"
+                        value="512m"
+                        placeholder="512m"
+                      />
+                      <span class="input-cursor"></span>
+                    </div>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="dockerCpuLimit" class="form-label">
+                      CPU Limit
+                      <span class="tooltip-icon" title="e.g., 1.0, 2.0">?</span>
+                    </label>
+                    <div class="input-wrapper">
+                      <span class="input-prefix">⚡</span>
+                      <input
+                        type="text"
+                        id="dockerCpuLimit"
+                        name="dockerCpuLimit"
+                        class="form-input"
+                        value="2.0"
+                        placeholder="2.0"
+                      />
+                      <span class="input-cursor"></span>
+                    </div>
+                  </div>
+                </div>
+              </fieldset>
+
+              <!-- Performance Settings -->
+              <fieldset class="form-section">
+                <legend class="section-title">
+                  <span class="section-icon">🚀</span>
+                  PERFORMANCE
+                </legend>
+                <div class="form-group">
+                  <label for="maxParallelJobs" class="form-label">
+                    Max Parallel Jobs
+                    <span class="tooltip-icon" title="0 = auto based on CPU"
+                      >?</span
+                    >
+                  </label>
+                  <div class="input-wrapper">
+                    <span class="input-prefix">⚙️</span>
+                    <input
+                      type="number"
+                      id="maxParallelJobs"
+                      name="maxParallelJobs"
+                      class="form-input"
+                      value="0"
+                      min="0"
+                    />
+                    <span class="input-cursor"></span>
+                  </div>
+                  <small class="form-helper"
+                    >0 = Auto (based on CPU cores)</small
+                  >
+                </div>
+              </fieldset>
+
+              <!-- Config Actions -->
+              <div class="button-group">
+                <button
+                  type="button"
+                  id="saveConfigBtn"
+                  class="btn btn-secondary"
+                >
+                  <span class="btn-icon">💾</span>
+                  <span class="btn-text">Save Config</span>
+                </button>
+                <button
+                  type="button"
+                  id="loadConfigBtn"
+                  class="btn btn-secondary"
+                >
+                  <span class="btn-icon">📂</span>
+                  <span class="btn-text">Load Config</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <!-- Control Panel -->
+        <section class="panel control-panel">
+          <div class="panel-header">
+            <span class="panel-icon">🎮</span>
+            <h2 class="panel-title">WORKER CONTROL</h2>
+            <div class="panel-glow"></div>
+          </div>
+          <div class="panel-body">
+            <div class="control-actions">
+              <button id="startBtn" class="btn btn-primary btn-large">
+                <span class="btn-icon">▶️</span>
+                <span class="btn-text">START WORKER</span>
+              </button>
+              <button id="stopBtn" class="btn btn-danger btn-large" disabled>
+                <span class="btn-icon">⏹️</span>
+                <span class="btn-text">STOP WORKER</span>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Output Panel -->
+        <section class="panel output-panel">
+          <div class="panel-header">
+            <span class="panel-icon">📡</span>
+            <h2 class="panel-title">EXECUTION OUTPUT</h2>
+            <div class="panel-glow"></div>
+          </div>
+          <div class="panel-body">
+            <div class="output-toolbar">
+              <div class="output-info">
+                <span class="output-line-count" id="lineCount">0 lines</span>
+              </div>
+              <div class="output-actions">
+                <button
+                  id="clearOutputBtn"
+                  class="btn-icon-small"
+                  title="Clear output"
+                >
+                  🗑️
+                </button>
+                <button
+                  id="copyOutputBtn"
+                  class="btn-icon-small"
+                  title="Copy to clipboard"
+                >
+                  📋
+                </button>
+              </div>
+            </div>
+            <div id="outputContainer" class="output-container">
+              <div class="output-empty">
+                <span class="empty-icon">🔌</span>
+                <p>Waiting for output...</p>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <!-- Footer -->
+      <footer class="footer">
+        <div class="footer-content">
+          <p>
+            CMD Executor Worker Agent v2.0.0 | Docker-enabled Distributed
+            Execution System
+          </p>
+          <div class="footer-status">
+            <span class="status-light" id="footerStatus"></span>
+            <span id="footerStatusText">DISCONNECTED</span>
+          </div>
+        </div>
+      </footer>
+    </div>
+
+    <!-- Notification Container -->
+    <div id="notificationContainer" class="notification-container"></div>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>

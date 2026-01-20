@@ -1,0 +1,41 @@
+{
+  "name": "cmd-executor-worker-gui",
+  "version": "1.0.0",
+  "description": "Electron GUI for CMD Executor Worker Agent",
+  "main": "main.js",
+  "author": "CMD Executor Team",
+  "license": "MIT",
+  "scripts": {
+    "electron": "npm run start",
+    "electron:dev": "npm run dev",
+    "start": "electron .",
+    "dev": "NODE_ENV=development electron .",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux"
+  },
+  "build": {
+    "appId": "com.cmdexecutor.worker",
+    "productName": "CMD Executor Worker",
+    "directories": {
+      "output": "../dist-electron"
+    },
+    "files": [
+      "**/*",
+      "../worker-agent.js"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "assets/icon.icns"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "assets/icon.png"
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "serverUrl": "http://localhost:3000",
+  "workerId": "",
+  "hostname": "",
+  "dockerTimeout": "300000",
+  "dockerMemoryLimit": "512m",
+  "dockerCpuLimit": "2.0",
+  "enableDocker": true,
+  "maxParallelJobs": "0"
+}

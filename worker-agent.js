@@ -41,6 +41,7 @@ console.log("[STARTUP] Environment configuration:");
 console.log(`[STARTUP] WORKER_TOKEN_SECRET: ${process.env.WORKER_TOKEN_SECRET ? "✓ SET" : "✗ NOT SET (using default)"}`);
 console.log(`[STARTUP] SERVER_URL (env): ${process.env.SERVER_URL || "not set"}`);
 console.log(`[STARTUP] WORKER_ID (env): ${process.env.WORKER_ID || "not set"}`);
+console.log(`[STARTUP] VERCEL_BYPASS_TOKEN: ${process.env.VERCEL_BYPASS_TOKEN ? "✓ SET" : "not set"}`);
 
 // ============================================================================
 // Configuration
@@ -908,38 +909,38 @@ class WorkerAgent {
             await downloadFile(fileUrl, zipPath, this.workerToken);
             log(`File downloaded`, "SUCCESS");
 
-                // Validate downloaded file
-                const fs = await import('fs/promises');
-                const stats = await fs.stat(zipPath);
-                log(`Downloaded file size: ${stats.size} bytes`, "INFO");
-            
-                if (stats.size === 0) {
-                    throw new Error("Downloaded file is empty (0 bytes)");
-                }
+            // Validate downloaded file
+            const fs = await import('fs/promises');
+            const stats = await fs.stat(zipPath);
+            log(`Downloaded file size: ${stats.size} bytes`, "INFO");
 
-                // Check if it's a valid zip by reading magic bytes
-                const buffer = Buffer.alloc(4);
-                const fileHandle = await fs.open(zipPath, 'r');
-                await fileHandle.read(buffer, 0, 4, 0);
-                await fileHandle.close();
-            
-                const magicBytes = buffer.toString('hex');
-                log(`File magic bytes: ${magicBytes}`, "INFO");
-            
-                // ZIP files start with "504b0304" (PK\x03\x04) or "504b0506" (PK\x05\x06)
-                if (!magicBytes.startsWith('504b03') && !magicBytes.startsWith('504b05')) {
-                    // Read first 200 bytes to see what we got
-                    const previewBuffer = Buffer.alloc(Math.min(200, stats.size));
-                    const fh = await fs.open(zipPath, 'r');
-                    await fh.read(previewBuffer, 0, previewBuffer.length, 0);
-                    await fh.close();
-                
-                    const preview = previewBuffer.toString('utf8').substring(0, 200);
-                    log(`File content preview: ${preview}`, "ERROR");
-                    throw new Error(`Downloaded file is not a valid ZIP (magic bytes: ${magicBytes}). Content: ${preview}`);
-                }
-            
-                log(`Valid ZIP file confirmed`, "SUCCESS");
+            if (stats.size === 0) {
+                throw new Error("Downloaded file is empty (0 bytes)");
+            }
+
+            // Check if it's a valid zip by reading magic bytes
+            const buffer = Buffer.alloc(4);
+            const fileHandle = await fs.open(zipPath, 'r');
+            await fileHandle.read(buffer, 0, 4, 0);
+            await fileHandle.close();
+
+            const magicBytes = buffer.toString('hex');
+            log(`File magic bytes: ${magicBytes}`, "INFO");
+
+            // ZIP files start with "504b0304" (PK\x03\x04) or "504b0506" (PK\x05\x06)
+            if (!magicBytes.startsWith('504b03') && !magicBytes.startsWith('504b05')) {
+                // Read first 200 bytes to see what we got
+                const previewBuffer = Buffer.alloc(Math.min(200, stats.size));
+                const fh = await fs.open(zipPath, 'r');
+                await fh.read(previewBuffer, 0, previewBuffer.length, 0);
+                await fh.close();
+
+                const preview = previewBuffer.toString('utf8').substring(0, 200);
+                log(`File content preview: ${preview}`, "ERROR");
+                throw new Error(`Downloaded file is not a valid ZIP (magic bytes: ${magicBytes}). Content: ${preview}`);
+            }
+
+            log(`Valid ZIP file confirmed`, "SUCCESS");
 
             // Extract zip
             log(`Extracting zip file...`, "INFO");

@@ -44,6 +44,7 @@ export async function GET(
     }
 
     const file = await downloadFile(fileId);
+    console.log("[FILE-DOWNLOAD] Mongo file bytes:", file.buffer.length);
 
     return new NextResponse(file.buffer as unknown as BodyInit, {
       headers: {

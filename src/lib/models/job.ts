@@ -29,7 +29,11 @@ export async function getJob(jobId: string): Promise<JobRecord | null> {
   const collection = db.collection(COLLECTION_NAME);
 
   const doc = await collection.findOne({ jobId });
-  return doc as JobRecord | null;
+  if (!doc) return null;
+  
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { _id, ...job } = doc;
+  return job as unknown as JobRecord;
 }
 
 /**
@@ -40,7 +44,11 @@ export async function getAllJobs(): Promise<JobRecord[]> {
   const collection = db.collection(COLLECTION_NAME);
 
   const docs = await collection.find().toArray();
-  return docs as JobRecord[];
+  return docs.map((doc) => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { _id, ...job } = doc;
+    return job as unknown as JobRecord;
+  });
 }
 
 /**

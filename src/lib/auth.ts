@@ -40,11 +40,12 @@ export function authenticateUser(
       extractBearer(req) || extractCookieToken(req, "auth_token") || "";
     const decoded = jwt.verify(token, config.jwtSecret) as UserClaims;
     return { ok: true, user: decoded };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Invalid token";
     return {
       ok: false,
       response: NextResponse.json(
-        { error: "Unauthorized", detail: error?.message || "Invalid token" },
+        { error: "Unauthorized", detail: message },
         { status: 401 },
       ),
     };
@@ -59,19 +60,20 @@ export function authenticateWorker(
     const bearer = extractBearer(req) || "";
     const token = headerToken || bearer;
     if (!token) throw new Error("Missing worker token");
-    const decoded = jwt.verify(token, config.workerTokenSecret) as any;
+    const decoded = jwt.verify(token, config.workerTokenSecret) as JwtPayload;
     if (!decoded.workerId) throw new Error("workerId missing in token");
     return {
       ok: true,
       worker: { workerId: decoded.workerId, hostname: decoded.hostname },
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Invalid token";
     return {
       ok: false,
       response: NextResponse.json(
         {
           error: "Unauthorized worker",
-          detail: error?.message || "Invalid token",
+          detail: message,
         },
         { status: 401 },
       ),
@@ -86,11 +88,17 @@ export async function rateLimit(
 ): Promise<{ ok: true } | { ok: false; response: NextResponse }> {
   const redis = getRedis();
   const redisKey = `ratelimit:${key}`;
-  const [[, countResult], [, ttlResult]] = await redis
+  const results = await redis
     .multi()
     .incr(redisKey)
     .pttl(redisKey)
     .exec();
+
+  if (!results) {
+    throw new Error("Redis multi exec failed");
+  }
+
+  const [[, countResult], [, ttlResult]] = results;
 
   const count = Number(countResult || 0);
   let ttl = Number(ttlResult || windowMs);

@@ -39,7 +39,7 @@ export function createWorkerWsServer(port = 8080) {
       const decoded = jwt.verify(token, config.workerTokenSecret) as any;
       if (!decoded.workerId) throw new Error("Invalid token payload");
 
-      workerId = decoded.workerId;
+      workerId = decoded.workerId as string;
       activeConnections.set(workerId, ws);
 
       console.log(`[WS] Worker ${workerId} connected`);

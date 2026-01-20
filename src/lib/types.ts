@@ -124,6 +124,12 @@ export interface JobRecord {
   /** Max execution time in milliseconds (scheduler enforces timeout) */
   timeoutMs: number;
 
+  /** Optional Docker container image for sandbox execution */
+  containerImage?: string;
+
+  /** Optional working directory for command execution */
+  workDir?: string;
+
   // ────────────────────────────────────────────────────────────────────────
   // EXECUTION STATE
   // ────────────────────────────────────────────────────────────────────────

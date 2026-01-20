@@ -11,6 +11,7 @@ import fs from "fs";
 import { jobRegistry, workerRegistry } from "./index";
 import { getJobStoragePath, getWorkerStoragePath } from "./constants";
 import { coerceJob, coerceWorker } from "./coercion";
+import { saveJob as saveJobToMongo, getAllJobs as getAllJobsFromMongo } from "../models/job";
 
 // ============================================================================
 // JOB PERSISTENCE
@@ -45,6 +46,34 @@ import { coerceJob, coerceWorker } from "./coercion";
  */
 export function loadJobs() {
   try {
+    // First try MongoDB (for Vercel/distributed deployments)
+    getAllJobsFromMongo()
+      .then((jobs) => {
+        if (jobs.length > 0) {
+          jobRegistry.clear();
+          jobs.forEach((job) => {
+            const normalized = coerceJob(job);
+            jobRegistry.set(normalized.jobId, normalized);
+          });
+          console.log(`[Registry] Loaded ${jobs.length} jobs from MongoDB`);
+          return;
+        }
+
+        // Fallback to local file if MongoDB is empty
+        loadJobsFromFile();
+      })
+      .catch(() => {
+        // MongoDB failed, fallback to local file
+        loadJobsFromFile();
+      });
+  } catch (error) {
+    console.error("[Registry] Failed to load jobs:", error);
+    // Continue silently - registries will start empty
+  }
+}
+
+function loadJobsFromFile() {
+  try {
     const filePath = getJobStoragePath();
 
     // Silently skip if file doesn't exist (first run)
@@ -59,10 +88,9 @@ export function loadJobs() {
       jobRegistry.set(normalized.jobId, normalized);
     });
 
-    console.log(`[Registry] Loaded ${jobs.length} jobs from storage`);
+    console.log(`[Registry] Loaded ${jobs.length} jobs from local file`);
   } catch (error) {
-    console.error("[Registry] Failed to load jobs:", error);
-    // Continue silently - registries will start empty
+    console.error("[Registry] Failed to load jobs from file:", error);
   }
 }
 
@@ -99,9 +127,19 @@ export function loadJobs() {
  */
 export function saveJobs() {
   try {
+    // Save to local JSON file (for backward compatibility)
     const filePath = getJobStoragePath();
     const jobs = Array.from(jobRegistry.values());
     fs.writeFileSync(filePath, JSON.stringify(jobs, null, 2), "utf-8");
+
+    // Also save to MongoDB for Vercel/distributed access
+    jobs.forEach(async (job) => {
+      try {
+        await saveJobToMongo(job);
+      } catch (error) {
+        console.error(`[Registry] Failed to save job ${job.jobId} to MongoDB:`, error);
+      }
+    });
   } catch (error) {
     console.error("[Registry] Failed to save jobs:", error);
     // Continue silently - jobs remain in memory

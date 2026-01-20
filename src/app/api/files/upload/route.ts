@@ -25,6 +25,13 @@ export async function POST(request: NextRequest) {
     // Convert file to buffer
     const buffer = Buffer.from(await file.arrayBuffer());
 
+    if (buffer.length === 0) {
+      return NextResponse.json(
+        { error: "Uploaded file is empty" },
+        { status: 400 },
+      );
+    }
+
     // Upload to GridFS
     const result = await uploadFile(buffer, file.name, file.type, {
       uploadedBy: auth.user.username,

@@ -58,6 +58,7 @@ const WORKER_ID = process.env.WORKER_ID || `worker-${randomUUID().slice(0, 8)}`;
 const WORKER_VERSION = "2.0.0-docker"; // Docker-enabled worker
 const HOSTNAME = process.env.HOSTNAME || "unknown-host";
 const WORKER_TOKEN_SECRET = process.env.WORKER_TOKEN_SECRET || "dev-worker-token-secret";
+const VERCEL_BYPASS_TOKEN = process.env.VERCEL_BYPASS_TOKEN || ""; // Optional bypass token for Vercel deployments
 const HEARTBEAT_INTERVAL = 10000; // 10 seconds
 const JOB_POLL_INTERVAL = 5000; // 5 seconds
 const WORK_DIR = join(homedir(), ".cmd-executor-worker");
@@ -539,8 +540,10 @@ const log = (msg, level = "INFO") => {
 // HTTP Utilities
 // ============================================================================
 
-const httpRequest = (method, url, data) => {
+const httpRequest = (method, url, data, redirectCount = 0) => {
     return new Promise((resolve, reject) => {
+        const MAX_REDIRECTS = 5;
+
         const isHttps = url.startsWith("https");
         const client = isHttps ? https : http;
         const urlObj = new URL(url);
@@ -556,9 +559,31 @@ const httpRequest = (method, url, data) => {
             },
         };
 
+        // Add Vercel bypass token if available
+        if (VERCEL_BYPASS_TOKEN) {
+            options.headers['x-vercel-protection-bypass'] = VERCEL_BYPASS_TOKEN;
+        }
+
         let body = "";
 
         const req = client.request(options, (res) => {
+            // Handle redirects (301, 302, 307, 308)
+            if ([301, 302, 307, 308].includes(res.statusCode) && res.headers.location) {
+                if (redirectCount >= MAX_REDIRECTS) {
+                    reject(new Error(`Too many redirects (${MAX_REDIRECTS})`));
+                    return;
+                }
+
+                const redirectUrl = new URL(res.headers.location, url);
+                log(`Following redirect to: ${redirectUrl.href}`, "INFO");
+
+                // Follow redirect
+                httpRequest(method, redirectUrl.href, data, redirectCount + 1)
+                    .then(resolve)
+                    .catch(reject);
+                return;
+            }
+
             res.on("data", (chunk) => {
                 body += chunk;
             });
@@ -593,8 +618,10 @@ const generateWorkerToken = (workerId, hostname) => {
     );
 };
 
-const downloadFile = (url, filePath, workerToken) => {
+const downloadFile = (url, filePath, workerToken, redirectCount = 0) => {
     return new Promise((resolve, reject) => {
+        const MAX_REDIRECTS = 5;
+
         const isHttps = url.startsWith("https");
         const client = isHttps ? https : http;
 
@@ -610,27 +637,82 @@ const downloadFile = (url, filePath, workerToken) => {
             },
         };
 
+        // Add Vercel bypass token if available
+        if (VERCEL_BYPASS_TOKEN) {
+            options.headers['x-vercel-protection-bypass'] = VERCEL_BYPASS_TOKEN;
+        }
+
+        log(`[Download] Requesting: ${url}`, "INFO");
+        log(`[Download] Headers: Authorization=Bearer ***, X-Worker-Token=***`, "INFO");
+
         const file = createWriteStream(filePath);
+        let bytesReceived = 0;
 
         const req = client.get(options, (res) => {
-            if (res.statusCode !== 200) {
-                reject(new Error(`Download failed: HTTP ${res.statusCode}`));
+            log(`[Download] Response status: ${res.statusCode}`, "INFO");
+            log(`[Download] Content-Type: ${res.headers['content-type'] || 'not set'}`, "INFO");
+            log(`[Download] Content-Length: ${res.headers['content-length'] || 'not set'}`, "INFO");
+
+            // Handle redirects (301, 302, 307, 308)
+            if ([301, 302, 307, 308].includes(res.statusCode) && res.headers.location) {
+                if (redirectCount >= MAX_REDIRECTS) {
+                    file.close();
+                    reject(new Error(`Too many redirects (${MAX_REDIRECTS})`));
+                    return;
+                }
+
+                const redirectUrl = new URL(res.headers.location, url);
+                log(`[Download] Following redirect to: ${redirectUrl.href}`, "INFO");
+
+                // Close the file stream since we're not using it
+                file.close();
+
+                // Follow redirect
+                downloadFile(redirectUrl.href, filePath, workerToken, redirectCount + 1)
+                    .then(resolve)
+                    .catch(reject);
                 return;
             }
+
+            if (res.statusCode !== 200) {
+                file.close();
+                // Capture response body for error details
+                let errorBody = "";
+                res.on("data", (chunk) => {
+                    errorBody += chunk.toString().substring(0, 500); // First 500 chars
+                });
+                res.on("end", () => {
+                    log(`[Download] Error response: ${errorBody}`, "ERROR");
+                    reject(new Error(`Download failed: HTTP ${res.statusCode} - ${errorBody}`));
+                });
+                return;
+            }
+
+            // Track bytes received
+            res.on("data", (chunk) => {
+                bytesReceived += chunk.length;
+            });
+
             res.pipe(file);
         });
 
         file.on("finish", () => {
             file.close();
+            log(`[Download] Complete: ${bytesReceived} bytes received`, "SUCCESS");
             resolve();
         });
 
         file.on("error", (err) => {
             file.close();
+            log(`[Download] File write error: ${err.message}`, "ERROR");
             reject(err);
         });
 
-        req.on("error", reject);
+        req.on("error", (err) => {
+            file.close();
+            log(`[Download] Request error: ${err.message}`, "ERROR");
+            reject(err);
+        });
     });
 };
 
@@ -825,6 +907,39 @@ class WorkerAgent {
 
             await downloadFile(fileUrl, zipPath, this.workerToken);
             log(`File downloaded`, "SUCCESS");
+
+                // Validate downloaded file
+                const fs = await import('fs/promises');
+                const stats = await fs.stat(zipPath);
+                log(`Downloaded file size: ${stats.size} bytes`, "INFO");
+            
+                if (stats.size === 0) {
+                    throw new Error("Downloaded file is empty (0 bytes)");
+                }
+
+                // Check if it's a valid zip by reading magic bytes
+                const buffer = Buffer.alloc(4);
+                const fileHandle = await fs.open(zipPath, 'r');
+                await fileHandle.read(buffer, 0, 4, 0);
+                await fileHandle.close();
+            
+                const magicBytes = buffer.toString('hex');
+                log(`File magic bytes: ${magicBytes}`, "INFO");
+            
+                // ZIP files start with "504b0304" (PK\x03\x04) or "504b0506" (PK\x05\x06)
+                if (!magicBytes.startsWith('504b03') && !magicBytes.startsWith('504b05')) {
+                    // Read first 200 bytes to see what we got
+                    const previewBuffer = Buffer.alloc(Math.min(200, stats.size));
+                    const fh = await fs.open(zipPath, 'r');
+                    await fh.read(previewBuffer, 0, previewBuffer.length, 0);
+                    await fh.close();
+                
+                    const preview = previewBuffer.toString('utf8').substring(0, 200);
+                    log(`File content preview: ${preview}`, "ERROR");
+                    throw new Error(`Downloaded file is not a valid ZIP (magic bytes: ${magicBytes}). Content: ${preview}`);
+                }
+            
+                log(`Valid ZIP file confirmed`, "SUCCESS");
 
             // Extract zip
             log(`Extracting zip file...`, "INFO");

@@ -271,6 +271,14 @@ async function handleDistributedExecution(
   try {
     // Upload file to GridFS instead of file system
     const buffer = Buffer.from(await zipFile.arrayBuffer());
+
+    if (buffer.length === 0) {
+      return NextResponse.json(
+        { error: "Uploaded zip is empty" },
+        { status: 400 },
+      );
+    }
+
     const uploadResult = await uploadFile(buffer, zipFile.name, zipFile.type, {
       uploadedBy: username,
       uploadedAt: new Date(),

@@ -13,10 +13,10 @@ import { getRedis } from "./db/redis";
 import { JobRecord, WorkerRecord } from "./types";
 
 const CACHE_TTL = {
-  WORKER: 60, // 60 seconds - workers update frequently
+  WORKER: 5, // 60 seconds - workers update frequently
   WORKER_LIST: 5, // 5 seconds - worker list changes frequently
-  JOB_STATUS: 30, // 30 seconds - job status checked often
-  CANCEL_FLAG: 10, // 10 seconds - cancellation needs quick propagation
+  JOB_STATUS: 5, // 30 seconds - job status checked often
+  CANCEL_FLAG: 5, // 10 seconds - cancellation needs quick propagation
 };
 
 const KEYS = {
@@ -102,7 +102,8 @@ export async function updateWorkerHeartbeat(
     lastHeartbeat: now,
   };
 
-  await redis.setex(key, CACHE_TTL.WORKER, JSON.stringify(updated));
+    await redis.setex(key, CACHE_TTL.WORKER, JSON.stringify(updated));
+
 }
 
 /**

@@ -59,8 +59,8 @@ const WORKER_VERSION = "2.0.0-docker"; // Docker-enabled worker
 const HOSTNAME = process.env.HOSTNAME || "unknown-host";
 const WORKER_TOKEN_SECRET = process.env.WORKER_TOKEN_SECRET || "dev-worker-token-secret";
 const VERCEL_BYPASS_TOKEN = process.env.VERCEL_BYPASS_TOKEN || ""; // Optional bypass token for Vercel deployments
-const HEARTBEAT_INTERVAL = 10000; // 10 seconds
-const JOB_POLL_INTERVAL = 5000; // 5 seconds
+const HEARTBEAT_INTERVAL = 3000; // 10 seconds
+const JOB_POLL_INTERVAL = 3000; // 5 seconds
 const WORK_DIR = join(homedir(), ".cmd-executor-worker");
 
 // Docker execution settings
@@ -878,13 +878,12 @@ class WorkerAgent {
                 0,
                 this.workerToken
             );
+            log(`Heartbeat sent: CPU ${stats.cpuUsage}%, RAM Free ${stats.ramFreeMb}MB, Jobs ${this.activeJobs.size}/${this.maxParallel}`, "INFO");
 
             if (response.statusCode !== 200) {
                 log(`Heartbeat failed: HTTP ${response.statusCode}`, "WARN");
             }
-
-            // Log Docker container stats for Electron UI to capture
-            log(`[WORKER-STATS] dockerContainers=${dockerStats.containerCount} dockerCpuUsage=${dockerStats.cpuUsage} dockerMemoryMb=${dockerStats.memoryMb}`, "INFO");
+            
         } catch (e) {
             log(`Heartbeat error: ${e}`, "WARN");
         }

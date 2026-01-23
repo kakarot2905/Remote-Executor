@@ -5,9 +5,7 @@ import {
   releaseJobResources,
   scheduleJobs,
 } from "@/lib/scheduler";
-import {
-  updateWorkerHeartbeat as updateWorkerHeartbeatCache,
-} from "@/lib/redis-cache";
+import { updateWorkerHeartbeat as updateWorkerHeartbeatCache } from "@/lib/redis-cache";
 import { getRedis } from "@/lib/db/redis";
 import { getWorker, updateWorkerStatus } from "@/lib/models/worker";
 

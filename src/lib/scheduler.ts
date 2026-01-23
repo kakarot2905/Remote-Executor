@@ -2,6 +2,9 @@
  * Centralized scheduler for resource-aware job assignment.
  * Keeps worker state fresh, requeues stranded jobs, and assigns queued jobs
  * to the healthiest available agents based on CPU/RAM availability and load.
+ *
+ * NOTE: Uses MongoDB as source of truth for multi-instance deployments.
+ * In-memory registries are used for fast access within a single request cycle.
  */
 
 import {
@@ -14,6 +17,9 @@ import {
   saveWorkers,
   workerRegistry,
 } from "./registries";
+import { getAllJobs, updateJobStatus } from "./models/job";
+import { getAllWorkers, updateWorkerStatus } from "./models/worker";
+import { cacheWorker, cacheJobStatus } from "./redis-cache";
 
 const HEARTBEAT_TIMEOUT_MS = 30_000; // mark workers offline after this gap
 const AGENT_COOLDOWN_MS = 30_000; // temporary penalty after failures
@@ -202,13 +208,77 @@ const assignQueuedJobs = (now: number): { assigned: number } => {
   return { assigned };
 };
 
-export const scheduleJobs = (trigger = "manual") => {
+export const scheduleJobs = async (trigger = "manual") => {
   const now = Date.now();
+
+  // Load fresh state from MongoDB for multi-instance safety
+  try {
+    const dbJobs = await getAllJobs();
+    const dbWorkers = await getAllWorkers();
+
+    // Sync into in-memory registries for this cycle
+    jobRegistry.clear();
+    workerRegistry.clear();
+    dbJobs.forEach((job) => jobRegistry.set(job.jobId, job));
+    dbWorkers.forEach((worker) => workerRegistry.set(worker.workerId, worker));
+  } catch (error) {
+    console.error("[Scheduler] Failed to load from MongoDB:", error);
+    // Continue with in-memory state as fallback
+  }
+
   const workersUpdated = refreshWorkerHealth(now);
   const reclaimed = checkRunningJobTimeouts(now);
   const { assigned } = assignQueuedJobs(now);
 
   if (workersUpdated || reclaimed > 0 || assigned > 0) {
+    // Persist changes back to MongoDB
+    try {
+      await Promise.all(
+        Array.from(workerRegistry.values()).map(async (worker) => {
+          try {
+            await updateWorkerStatus(worker.workerId, worker.status, {
+              currentJobIds: worker.currentJobIds,
+              reservedCpu: worker.reservedCpu,
+              reservedRamMb: worker.reservedRamMb,
+              cooldownUntil: worker.cooldownUntil,
+              updatedAt: worker.updatedAt,
+            });
+            // Warm cache for fast heartbeat responses
+            await cacheWorker(worker);
+          } catch (error) {
+            console.warn(
+              `[Scheduler] Failed to update worker ${worker.workerId}:`,
+              error,
+            );
+          }
+        }),
+      );
+
+      await Promise.all(
+        Array.from(jobRegistry.values()).map(async (job) => {
+          try {
+            await updateJobStatus(job.jobId, job.status, {
+              assignedAgentId: job.assignedAgentId,
+              assignedAt: job.assignedAt,
+              queuedAt: job.queuedAt,
+              errorMessage: job.errorMessage,
+              attempts: job.attempts,
+            });
+            // Warm cache for fast status queries
+            await cacheJobStatus(job);
+          } catch (error) {
+            console.warn(
+              `[Scheduler] Failed to update job ${job.jobId}:`,
+              error,
+            );
+          }
+        }),
+      );
+    } catch (error) {
+      console.error("[Scheduler] Failed to persist changes:", error);
+    }
+
+    // Also save to in-memory persistence (fallback)
     saveWorkers();
     saveJobs();
   }

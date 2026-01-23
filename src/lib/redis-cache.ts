@@ -102,8 +102,8 @@ export async function updateWorkerHeartbeat(
     lastHeartbeat: now,
   };
 
-    await redis.setex(key, CACHE_TTL.WORKER, JSON.stringify(updated));
-
+  const response =  await redis.setex(key, CACHE_TTL.WORKER, JSON.stringify(updated));
+  console.log("Redis setex response:", response);
 }
 
 /**

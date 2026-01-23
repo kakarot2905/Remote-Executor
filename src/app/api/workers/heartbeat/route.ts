@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { workerRegistry, saveWorkers, AgentStatus } from "@/lib/registries";
+import { AgentStatus } from "@/lib/registries";
 import { scheduleJobs } from "@/lib/scheduler";
+import {
+  getWorker,
+  updateWorkerHeartbeat as updateWorkerHeartbeatDb,
+} from "@/lib/models/worker";
+import {
+  getCachedWorker,
+  updateWorkerHeartbeat as updateWorkerHeartbeatCache,
+  shouldWriteWorkerToMongo,
+} from "@/lib/redis-cache";
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,8 +32,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const worker = workerRegistry.get(workerId);
-    if (!worker) {
+    // Prefer Redis (fast), fallback to MongoDB
+    const cached = await getCachedWorker(workerId);
+    let exists = !!cached;
+    if (!exists) {
+      const dbWorker = await getWorker(workerId);
+      exists = !!dbWorker;
+    }
+    if (!exists) {
       return NextResponse.json({ error: "Worker not found" }, { status: 404 });
     }
 
@@ -34,35 +49,50 @@ export async function POST(request: NextRequest) {
         ? status
         : "IDLE";
 
-    worker.cpuUsage = Number(cpuUsage) || 0;
-    worker.ramFreeMb =
-      ramFreeMb !== undefined
-        ? Math.max(0, Math.round(Number(ramFreeMb)))
-        : worker.ramFreeMb;
-    worker.ramTotalMb =
-      ramTotalMb !== undefined
-        ? Math.max(0, Math.round(Number(ramTotalMb)))
-        : worker.ramTotalMb;
-    worker.status = normalizedStatus;
-    worker.lastHeartbeat = now;
-    worker.updatedAt = now;
+    // Update Redis cache (fast path)
+    await updateWorkerHeartbeatCache(workerId, {
+      cpuUsage: Number(cpuUsage) || 0,
+      ramFreeMb:
+        ramFreeMb !== undefined
+          ? Math.max(0, Math.round(Number(ramFreeMb)))
+          : undefined,
+      ramTotalMb:
+        ramTotalMb !== undefined
+          ? Math.max(0, Math.round(Number(ramTotalMb)))
+          : undefined,
+      status: normalizedStatus,
+      dockerContainers:
+        dockerContainers !== undefined ? Number(dockerContainers) : undefined,
+      dockerCpuUsage:
+        dockerCpuUsage !== undefined ? Number(dockerCpuUsage) : undefined,
+      dockerMemoryMb:
+        dockerMemoryMb !== undefined ? Number(dockerMemoryMb) : undefined,
+    });
 
-    // Update Docker container stats
-    worker.dockerContainers =
-      dockerContainers !== undefined ? Number(dockerContainers) : 0;
-    worker.dockerCpuUsage =
-      dockerCpuUsage !== undefined ? Number(dockerCpuUsage) : 0;
-    worker.dockerMemoryMb =
-      dockerMemoryMb !== undefined ? Number(dockerMemoryMb) : 0;
-
-    saveWorkers();
+    // Persist to MongoDB (authoritative store) on a throttled schedule
+    if (await shouldWriteWorkerToMongo(workerId, 30)) {
+      await updateWorkerHeartbeatDb(workerId, {
+        cpuUsage: Number(cpuUsage) || 0,
+        ramFreeMb:
+          ramFreeMb !== undefined
+            ? Math.max(0, Math.round(Number(ramFreeMb)))
+            : undefined,
+        ramTotalMb:
+          ramTotalMb !== undefined
+            ? Math.max(0, Math.round(Number(ramTotalMb)))
+            : undefined,
+        status: normalizedStatus,
+        dockerContainers:
+          dockerContainers !== undefined ? Number(dockerContainers) : undefined,
+        dockerCpuUsage:
+          dockerCpuUsage !== undefined ? Number(dockerCpuUsage) : undefined,
+        dockerMemoryMb:
+          dockerMemoryMb !== undefined ? Number(dockerMemoryMb) : undefined,
+      });
+    }
     scheduleJobs("heartbeat");
 
-    return NextResponse.json({
-      success: true,
-      workerId,
-      timestamp: worker.lastHeartbeat,
-    });
+    return NextResponse.json({ success: true, workerId, timestamp: now });
   } catch (error: any) {
     return NextResponse.json(
       { error: error.message || "Internal server error" },

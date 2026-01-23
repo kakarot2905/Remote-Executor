@@ -21,14 +21,13 @@
  */
 
 import { spawn, execSync } from "child_process";
-import { createWriteStream } from "fs";
-import { mkdir, readFile, writeFile, rm, access, constants as fsConstants } from "fs/promises";
+import { createWriteStream, unlinkSync, existsSync } from "fs";
+import { mkdir, rm } from "fs/promises";
 import { homedir, cpus, freemem, totalmem, type as osType } from "os";
-import { join, resolve } from "path";
-import { randomUUID, createHmac } from "crypto";
+import { join } from "path";
+import { randomUUID } from "crypto";
 import https from "https";
 import http from "http";
-import { readFileSync, existsSync } from "fs";
 import AdmZip from "adm-zip";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
@@ -541,7 +540,7 @@ const log = (msg, level = "INFO") => {
 // HTTP Utilities
 // ============================================================================
 
-const httpRequest = (method, url, data, redirectCount = 0) => {
+const httpRequest = (method, url, data, redirectCount = 0, workerToken = null) => {
     return new Promise((resolve, reject) => {
         const MAX_REDIRECTS = 5;
 
@@ -559,6 +558,12 @@ const httpRequest = (method, url, data, redirectCount = 0) => {
                 "User-Agent": `cmd-executor-worker/${WORKER_VERSION}`,
             },
         };
+
+        // Add worker authentication token if available
+        if (workerToken) {
+            options.headers['Authorization'] = `Bearer ${workerToken}`;
+            options.headers['X-Worker-Token'] = workerToken;
+        }
 
         // Add Vercel bypass token if available
         if (VERCEL_BYPASS_TOKEN) {
@@ -578,8 +583,8 @@ const httpRequest = (method, url, data, redirectCount = 0) => {
                 const redirectUrl = new URL(res.headers.location, url);
                 log(`Following redirect to: ${redirectUrl.href}`, "INFO");
 
-                // Follow redirect
-                httpRequest(method, redirectUrl.href, data, redirectCount + 1)
+                // Follow redirect with workerToken
+                httpRequest(method, redirectUrl.href, data, redirectCount + 1, workerToken)
                     .then(resolve)
                     .catch(reject);
                 return;
@@ -657,7 +662,13 @@ const downloadFile = (url, filePath, workerToken, redirectCount = 0) => {
             // Handle redirects (301, 302, 307, 308)
             if ([301, 302, 307, 308].includes(res.statusCode) && res.headers.location) {
                 if (redirectCount >= MAX_REDIRECTS) {
-                    file.close();
+                    file.destroy();
+                    // Clean up empty file
+                    setImmediate(() => {
+                        try {
+                            if (existsSync(filePath)) unlinkSync(filePath);
+                        } catch (e) { /* ignore */ }
+                    });
                     reject(new Error(`Too many redirects (${MAX_REDIRECTS})`));
                     return;
                 }
@@ -665,18 +676,36 @@ const downloadFile = (url, filePath, workerToken, redirectCount = 0) => {
                 const redirectUrl = new URL(res.headers.location, url);
                 log(`[Download] Following redirect to: ${redirectUrl.href}`, "INFO");
 
-                // Close the file stream since we're not using it
-                file.close();
+                // CRITICAL: Properly destroy stream and delete partial file before recursive call
+                file.destroy();
 
-                // Follow redirect
-                downloadFile(redirectUrl.href, filePath, workerToken, redirectCount + 1)
-                    .then(resolve)
-                    .catch(reject);
+                // Delete the empty/partial file before following redirect
+                setImmediate(() => {
+                    try {
+                        if (existsSync(filePath)) {
+                            unlinkSync(filePath);
+                            log(`[Download] Cleaned up partial file before redirect`, "INFO");
+                        }
+                    } catch (e) {
+                        log(`[Download] Warning: Could not delete partial file: ${e.message}`, "WARN");
+                    }
+
+                    // Follow redirect AFTER cleanup
+                    downloadFile(redirectUrl.href, filePath, workerToken, redirectCount + 1)
+                        .then(resolve)
+                        .catch(reject);
+                });
                 return;
             }
 
             if (res.statusCode !== 200) {
-                file.close();
+                file.destroy();
+                // Clean up empty file
+                setImmediate(() => {
+                    try {
+                        if (existsSync(filePath)) unlinkSync(filePath);
+                    } catch (e) { /* ignore */ }
+                });
                 // Capture response body for error details
                 let errorBody = "";
                 res.on("data", (chunk) => {
@@ -704,13 +733,25 @@ const downloadFile = (url, filePath, workerToken, redirectCount = 0) => {
         });
 
         file.on("error", (err) => {
-            file.close();
+            file.destroy();
+            // Clean up corrupted file
+            setImmediate(() => {
+                try {
+                    if (existsSync(filePath)) unlinkSync(filePath);
+                } catch (e) { /* ignore */ }
+            });
             log(`[Download] File write error: ${err.message}`, "ERROR");
             reject(err);
         });
 
         req.on("error", (err) => {
-            file.close();
+            file.destroy();
+            // Clean up partial file
+            setImmediate(() => {
+                try {
+                    if (existsSync(filePath)) unlinkSync(filePath);
+                } catch (e) { /* ignore */ }
+            });
             log(`[Download] Request error: ${err.message}`, "ERROR");
             reject(err);
         });
@@ -800,7 +841,9 @@ class WorkerAgent {
                 ...collectSystemStats(),
                 version: WORKER_VERSION,
                 status: "IDLE",
-            }
+            },
+            0,
+            this.workerToken
         );
 
         if (response.statusCode !== 200) {
@@ -816,7 +859,6 @@ class WorkerAgent {
     async sendHeartbeat() {
         try {
             const stats = collectSystemStats();
-            log("Collecting docker stats...", "INFO");
             const dockerStats = getDockerContainerStats();
             const agentStatus = this.activeJobs.size > 0 ? "BUSY" : "IDLE";
             const response = await httpRequest(
@@ -832,7 +874,9 @@ class WorkerAgent {
                     dockerContainers: dockerStats.containerCount,
                     dockerCpuUsage: dockerStats.cpuUsage,
                     dockerMemoryMb: dockerStats.memoryMb,
-                }
+                },
+                0,
+                this.workerToken
             );
 
             if (response.statusCode !== 200) {
@@ -854,7 +898,10 @@ class WorkerAgent {
         try {
             const response = await httpRequest(
                 "GET",
-                `${this.serverUrl}/api/jobs/get-job?workerId=${this.workerId}`
+                `${this.serverUrl}/api/jobs/get-job?workerId=${this.workerId}`,
+                null,
+                0,
+                this.workerToken
             );
 
             if (response.statusCode === 202) {
@@ -971,6 +1018,7 @@ class WorkerAgent {
                 // Stream output callback - sends data immediately as it arrives
                 const streamCallback = async (data) => {
                     try {
+                        log(`[STREAM] Sending ${data.type}: ${data.text.substring(0, 80)}...`, "INFO");
                         await httpRequest(
                             "POST",
                             `${this.serverUrl}/api/jobs/stream-output`,
@@ -978,8 +1026,11 @@ class WorkerAgent {
                                 jobId: job.jobId,
                                 data: data.text,
                                 type: data.type, // 'stdout' or 'stderr'
-                            }
+                            },
+                            0,
+                            this.workerToken
                         );
+                        log(`[STREAM] ${data.type} sent successfully`, "INFO");
                     } catch (e) {
                         log(`Failed to stream output: ${e.message}`, "WARN");
                     }
@@ -1022,7 +1073,9 @@ class WorkerAgent {
                     stdout,
                     stderr,
                     exitCode,
-                }
+                },
+                0,
+                this.workerToken
             );
 
             if (submitResponse.statusCode === 200) {
@@ -1044,7 +1097,9 @@ class WorkerAgent {
                         jobId: job.jobId,
                         workerId: this.workerId,
                         errorMessage: error.message,
-                    }
+                    },
+                    0,
+                    this.workerToken
                 );
             } catch (e) {
                 log(`Failed to report job failure: ${e}`, "ERROR");

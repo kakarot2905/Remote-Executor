@@ -1,27 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
-import { workerRegistry } from "@/lib/registries";
+import { getAllWorkers } from "@/lib/models/worker";
+import { getCachedWorkerList, cacheWorkerList } from "@/lib/redis-cache";
 
 export async function GET(request: NextRequest) {
   try {
-    const workers = Array.from(workerRegistry.values()).map((worker) => ({
-      workerId: worker.workerId,
-      status: worker.status,
-      hostname: worker.hostname,
-      os: worker.os,
-      cpuCount: worker.cpuCount,
-      cpuUsage: worker.cpuUsage,
-      ramTotalMb: worker.ramTotalMb,
-      ramFreeMb: worker.ramFreeMb,
-      lastHeartbeat: worker.lastHeartbeat,
-      currentJobIds: worker.currentJobIds,
-      reservedCpu: worker.reservedCpu,
-      reservedRamMb: worker.reservedRamMb,
-      cooldownUntil: worker.cooldownUntil,
-      updatedAt: worker.updatedAt,
-      dockerContainers: worker.dockerContainers,
-      dockerCpuUsage: worker.dockerCpuUsage,
-      dockerMemoryMb: worker.dockerMemoryMb,
-    }));
+    // Try Redis-cached worker list first
+    const cached = await getCachedWorkerList();
+    if (cached) {
+      const { workers } = cached;
+      return NextResponse.json({
+        success: true,
+        workers,
+        totalWorkers: workers.length,
+        idleWorkers: workers.filter((w) => w.status === "IDLE").length,
+        busyWorkers: workers.filter((w) => w.status === "BUSY").length,
+        unhealthyWorkers: workers.filter((w) => w.status === "UNHEALTHY")
+          .length,
+        cached: true,
+      });
+    }
+
+    // Fallback: load from MongoDB and cache for short TTL
+    const workers = await getAllWorkers();
+    await cacheWorkerList(workers);
 
     return NextResponse.json({
       success: true,
@@ -30,6 +31,7 @@ export async function GET(request: NextRequest) {
       idleWorkers: workers.filter((w) => w.status === "IDLE").length,
       busyWorkers: workers.filter((w) => w.status === "BUSY").length,
       unhealthyWorkers: workers.filter((w) => w.status === "UNHEALTHY").length,
+      cached: false,
     });
   } catch (error) {
     console.error("List workers error:", error);

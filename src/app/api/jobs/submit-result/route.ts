@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  jobRegistry,
-  saveJobs,
-  workerRegistry,
-  saveWorkers,
-} from "@/lib/registries";
+import { jobRegistry, saveJobs } from "@/lib/registries";
 import {
   recordWorkerFailure,
   releaseJobResources,
   scheduleJobs,
 } from "@/lib/scheduler";
+import {
+  updateWorkerHeartbeat as updateWorkerHeartbeatCache,
+} from "@/lib/redis-cache";
+import { getRedis } from "@/lib/db/redis";
+import { getWorker, updateWorkerStatus } from "@/lib/models/worker";
 
 export async function POST(request: NextRequest) {
   try {
@@ -44,15 +44,46 @@ export async function POST(request: NextRequest) {
     job.completedAt = Date.now();
     job.errorMessage = null;
 
-    // Release worker resources and mark idle if nothing else is queued
+    // Release worker resources and update worker state via Redis + MongoDB
     releaseJobResources(jobId);
-    const worker = workerRegistry.get(workerId);
-    if (worker && worker.currentJobIds.length === 0) {
-      worker.status = "IDLE";
-    }
+
+    const now = Date.now();
+    try {
+      const dbWorker = await getWorker(workerId);
+      const newJobs = (dbWorker?.currentJobIds || []).filter(
+        (id) => id !== jobId,
+      );
+      const newStatus = newJobs.length === 0 ? "IDLE" : "BUSY";
+      await updateWorkerStatus(workerId, newStatus, {
+        currentJobIds: newJobs,
+        updatedAt: now,
+      });
+      await updateWorkerHeartbeatCache(workerId, { status: newStatus });
+    } catch {}
 
     saveJobs();
-    saveWorkers();
+
+    // Invalidate short-lived cache, keep long-lived cache for completed jobs
+    try {
+      const redis = getRedis();
+      await redis.del(`job:status:${jobId}`);
+      // Update with final status (1-hour TTL for completed jobs)
+      const finalStatus = {
+        jobId,
+        status: "COMPLETED",
+        stdout,
+        stderr,
+        exitCode,
+        completedAt: job.completedAt,
+      };
+      await redis.setex(
+        `job:status:${jobId}`,
+        3600,
+        JSON.stringify(finalStatus),
+      );
+    } catch (redisError) {
+      console.warn(`Redis cache update error for job:${jobId}:`, redisError);
+    }
 
     scheduleJobs("job-finished");
 
@@ -98,8 +129,41 @@ export async function PUT(request: NextRequest) {
 
     releaseJobResources(jobId);
 
+    const now = Date.now();
+    try {
+      const dbWorker = await getWorker(workerId);
+      const newJobs = (dbWorker?.currentJobIds || []).filter(
+        (id) => id !== jobId,
+      );
+      const newStatus =
+        newJobs.length === 0 ? "IDLE" : dbWorker?.status || "IDLE";
+      await updateWorkerStatus(workerId, newStatus, {
+        currentJobIds: newJobs,
+        updatedAt: now,
+      });
+      await updateWorkerHeartbeatCache(workerId, { status: newStatus });
+    } catch {}
+
     saveJobs();
-    saveWorkers();
+
+    // Invalidate cache on failure
+    try {
+      const redis = getRedis();
+      await redis.del(`job:status:${jobId}`);
+      await redis.del(`job:cancel:${jobId}`);
+      const finalStatus = {
+        jobId,
+        status: refreshedJob?.status || "FAILED",
+        errorMessage: refreshedJob?.errorMessage || errorMessage,
+      };
+      await redis.setex(
+        `job:status:${jobId}`,
+        3600,
+        JSON.stringify(finalStatus),
+      );
+    } catch (redisError) {
+      console.warn(`Redis cache error for job:${jobId}:`, redisError);
+    }
 
     scheduleJobs("job-failed");
 

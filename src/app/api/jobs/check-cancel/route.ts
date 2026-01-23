@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jobRegistry } from "@/lib/registries";
+import { getRedis } from "@/lib/db/redis";
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,6 +13,22 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Try Redis cache first (fast path for frequent checks)
+    try {
+      const redis = getRedis();
+      const cachedStatus = await redis.get(`job:cancel:${jobId}`);
+      if (cachedStatus !== null) {
+        return NextResponse.json({
+          success: true,
+          cancelRequested: cachedStatus === "true",
+        });
+      }
+    } catch (redisError) {
+      console.warn(`Redis read error for job:cancel:${jobId}:`, redisError);
+      // Fall through to registry check
+    }
+
+    // Fallback to in-memory registry
     const job = jobRegistry.get(jobId);
     if (!job) {
       return NextResponse.json(
@@ -20,9 +37,24 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const cancelRequested = job.cancelRequested || false;
+
+    // Cache the result in Redis for subsequent checks (2-minute TTL)
+    try {
+      const redis = getRedis();
+      await redis.setex(
+        `job:cancel:${jobId}`,
+        120,
+        cancelRequested ? "true" : "false",
+      );
+    } catch (redisError) {
+      console.warn(`Redis cache error for job:cancel:${jobId}:`, redisError);
+      // Continue without cache
+    }
+
     return NextResponse.json({
       success: true,
-      cancelRequested: job.cancelRequested || false,
+      cancelRequested,
     });
   } catch (error) {
     console.error("Check cancel error:", error);

@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  workerRegistry,
-  saveWorkers,
-  WorkerRecord,
-  AgentStatus,
-} from "@/lib/registries";
+import { WorkerRecord, AgentStatus } from "@/lib/registries";
 import { scheduleJobs } from "@/lib/scheduler";
+import { saveWorker } from "@/lib/models/worker";
+import { cacheWorker } from "@/lib/redis-cache";
 
 export async function POST(request: NextRequest) {
   try {
@@ -54,8 +51,9 @@ export async function POST(request: NextRequest) {
       cooldownUntil: null,
     };
 
-    workerRegistry.set(workerId, workerInfo);
-    saveWorkers();
+    await saveWorker(workerInfo);
+    // Warm Redis cache for fast subsequent lookups
+    await cacheWorker(workerInfo);
 
     // Kick scheduler in case queued jobs are waiting
     scheduleJobs("worker-register");
@@ -71,10 +69,4 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     );
   }
-}
-
-export async function GET(request: NextRequest) {
-  // Return list of all workers (admin endpoint)
-  const workers = Array.from(workerRegistry.values());
-  return NextResponse.json({ workers, count: workers.length });
 }

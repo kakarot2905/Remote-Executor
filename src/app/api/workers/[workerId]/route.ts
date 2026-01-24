@@ -6,7 +6,7 @@ import {
 
 export async function DELETE(
   request: NextRequest,
-  context: { params: { workerId: string } },
+  context: { params: Promise<{ workerId: string }> },
 ) {
   console.log("DELETE /api/workers/[workerId] called", request);
   try {

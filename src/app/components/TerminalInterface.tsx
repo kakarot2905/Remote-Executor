@@ -243,11 +243,15 @@ export default function TerminalInterface({
       let lastStdoutLength = 0;
       let lastStderrLength = 0;
       let hasShownRunningMessage = false;
+      let isCancelled = false; // Track if poll was cancelled
+
+      const pollAbortController = new AbortController();
 
       const poll = async () => {
         try {
           const response = await fetch(`/api/jobs/status?jobId=${jId}`, {
             headers: clientAuth.getAuthHeaders(),
+            signal: pollAbortController.signal,
           });
           if (!response.ok) {
             if (completionAttempts > maxAttempts) {
@@ -265,6 +269,11 @@ export default function TerminalInterface({
           }
 
           const job = await response.json();
+
+          // Don't process output if job was cancelled
+          if (isCancelled) {
+            return;
+          }
 
           if (job.status === "ASSIGNED" || job.status === "RUNNING") {
             // Show running message only once
@@ -319,6 +328,16 @@ export default function TerminalInterface({
             setIsExecuting(false);
             setJobId(null);
             resolve();
+          } else if (job.status === "CANCELLED") {
+            // Handle cancelled status - don't show error or re-output
+            addLog("Job was cancelled", "info");
+            if (pollIntervalRef.current) {
+              clearInterval(pollIntervalRef.current);
+              pollIntervalRef.current = null;
+            }
+            setIsExecuting(false);
+            setJobId(null);
+            resolve();
           } else if (job.status === "FAILED") {
             addLog("✗ Job failed!", "error");
             addLog(job.errorMessage || "Unknown error", "error");
@@ -346,12 +365,19 @@ export default function TerminalInterface({
             resolve();
           }
         } catch (error: unknown) {
+          // Ignore abort errors (expected when cancelling)
+          if (error instanceof Error && error.name === "AbortError") {
+            return;
+          }
           console.error("Status poll error:", error);
         }
       };
 
       pollIntervalRef.current = setInterval(poll, 500);
       poll();
+
+      // Store abort controller in ref for cancellation
+      abortRef.current = pollAbortController;
     });
   };
 
@@ -365,7 +391,10 @@ export default function TerminalInterface({
     }
 
     // Abort ongoing fetch requests
-    abortRef.current?.abort();
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
 
     try {
       // For direct mode - kill process
@@ -399,7 +428,6 @@ export default function TerminalInterface({
       setIsExecuting(false);
       setExecId(null);
       setJobId(null);
-      abortRef.current = null;
     }
   };
 

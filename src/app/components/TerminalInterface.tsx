@@ -51,6 +51,12 @@ export default function TerminalInterface({
     if (typeof window === "undefined") return null;
     return localStorage.getItem(`${storageKey}-jobId`) || null;
   });
+  const [statusMessage, setStatusMessage] = useState<string>(
+    "Ready to start - Select a file and enter commands",
+  );
+  const [statusType, setStatusType] = useState<
+    "idle" | "info" | "success" | "error" | "warning"
+  >("info");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -108,7 +114,8 @@ export default function TerminalInterface({
     const file = e.target.files?.[0];
     if (file) {
       setSelectedFile(file);
-      addLog(`File selected: ${file.name}`, "info");
+      setStatusMessage(`File selected: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`);
+      setStatusType("info");
     }
   };
 
@@ -124,6 +131,8 @@ export default function TerminalInterface({
     }
 
     setIsExecuting(true);
+    setStatusMessage("⏳ Uploading file and executing commands...");
+    setStatusType("info");
     const abortController = new AbortController();
     abortRef.current = abortController;
     addLog(
@@ -160,8 +169,8 @@ export default function TerminalInterface({
         if (data.jobId) {
           setJobId(data.jobId);
           addLog(`Job created: ${data.jobId}`, "info");
-          addLog(data.message, "info");
-          addLog("Waiting for worker to pick up the job...", "info");
+          setStatusMessage(`Job created: ${data.jobId}`);
+          setStatusType("info");
 
           // Start polling for job status
           await pollJobStatus(data.jobId);
@@ -243,7 +252,8 @@ export default function TerminalInterface({
       let lastStdoutLength = 0;
       let lastStderrLength = 0;
       let hasShownRunningMessage = false;
-      let isCancelled = false; // Track if poll was cancelled
+      let isCancelled = false; // Track if job was cancelled
+      let finished = false; // Ensure terminal state handled once
 
       const pollAbortController = new AbortController();
 
@@ -270,18 +280,18 @@ export default function TerminalInterface({
 
           const job = await response.json();
 
-          // Don't process output if job was cancelled
-          if (isCancelled) {
-            return;
-          }
+          // If we've already finalized, ignore any further ticks
+          if (finished) return;
 
           if (job.status === "ASSIGNED" || job.status === "RUNNING") {
             // Show running message only once
             if (!hasShownRunningMessage) {
-              addLog(
-                `Job is running on worker: ${job.assignedAgentId}`,
-                "info",
-              );
+              const message =
+                job.status === "ASSIGNED"
+                  ? `Waiting for worker to pick up the job...`
+                  : `Job is running on worker: ${job.assignedAgentId}`;
+              setStatusMessage(message);
+              setStatusType("info");
               hasShownRunningMessage = true;
             }
 
@@ -302,6 +312,10 @@ export default function TerminalInterface({
               lastStderrLength = job.stderr.length;
             }
           } else if (job.status === "COMPLETED") {
+            // Guard: handle completion once
+            finished = true;
+            setStatusMessage(`✓ Job completed with exit code: ${job.exitCode}`);
+            setStatusType(job.exitCode === 0 ? "success" : "warning");
             addLog("✓ Job completed!", "info");
 
             // Display any remaining output that wasn't shown during streaming
@@ -330,6 +344,10 @@ export default function TerminalInterface({
             resolve();
           } else if (job.status === "CANCELLED") {
             // Handle cancelled status - don't show error or re-output
+            finished = true;
+            isCancelled = true;
+            setStatusMessage("Job was cancelled by user");
+            setStatusType("warning");
             addLog("Job was cancelled", "info");
             if (pollIntervalRef.current) {
               clearInterval(pollIntervalRef.current);
@@ -339,6 +357,12 @@ export default function TerminalInterface({
             setJobId(null);
             resolve();
           } else if (job.status === "FAILED") {
+            // Guard: handle failure once
+            finished = true;
+            setStatusMessage(
+              `✗ Job failed: ${job.errorMessage || "Unknown error"}`,
+            );
+            setStatusType("error");
             addLog("✗ Job failed!", "error");
             addLog(job.errorMessage || "Unknown error", "error");
 
@@ -372,7 +396,11 @@ export default function TerminalInterface({
           console.error("Status poll error:", error);
         }
       };
-
+      // Clear any existing interval before starting a new one
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
       pollIntervalRef.current = setInterval(poll, 500);
       poll();
 
@@ -382,6 +410,8 @@ export default function TerminalInterface({
   };
 
   const handleForceStop = async () => {
+    setStatusMessage("⏹ Force stop requested...");
+    setStatusType("warning");
     addLog("Force stop requested", "info");
 
     // Stop polling if running
@@ -433,12 +463,16 @@ export default function TerminalInterface({
 
   const handleClear = () => {
     setLogs([]);
+    setStatusMessage("Ready to start - Select a file and enter commands");
+    setStatusType("info");
     addLog("Terminal cleared", "info");
   };
 
   const handleReset = () => {
     setCommands("");
     setSelectedFile(null);
+    setStatusMessage("Ready to start - Select a file and enter commands");
+    setStatusType("info");
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -570,6 +604,26 @@ export default function TerminalInterface({
               </div>
             </div>
 
+            {/* Status Display */}
+            {statusMessage && (
+              <div
+                className={`col-span-3 p-3 rounded border-2 ${
+                  statusType === "success"
+                    ? "bg-green-900/30 border-green-400 text-green-300"
+                    : statusType === "error"
+                      ? "bg-red-900/30 border-red-400 text-red-300"
+                      : statusType === "warning"
+                        ? "bg-orange-900/30 border-orange-400 text-orange-300"
+                        : "bg-blue-900/30 border-blue-400 text-blue-300"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold">Status:</span>
+                  <span className="text-sm">{statusMessage}</span>
+                </div>
+              </div>
+            )}
+
             {/* Action Buttons */}
             <div className="grid grid-cols-4 gap-2 shrink-0">
               <button
@@ -656,17 +710,6 @@ export default function TerminalInterface({
                     {log.content}
                   </div>
                 ))
-              )}
-            </div>
-
-            {/* Terminal Footer */}
-            <div className="bg-gray-800 border-t border-green-400 px-4 py-2 text-xs text-green-300">
-              {isExecuting ? (
-                <span>● Executing...</span>
-              ) : logs.length > 0 ? (
-                <span>✓ Ready</span>
-              ) : (
-                <span>○ Waiting for input...</span>
               )}
             </div>
           </div>

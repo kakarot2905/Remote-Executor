@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  jobRegistry,
-  saveJobs,
-  workerRegistry,
-  saveWorkers,
-} from "@/lib/registries";
 import { scheduleJobs } from "@/lib/scheduler";
+import { getAllJobs, updateJobStatus } from "@/lib/models/job";
+import { getWorker, updateWorkerStatus } from "@/lib/models/worker";
 
 export async function GET(request: NextRequest) {
   try {
@@ -18,7 +14,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const worker = workerRegistry.get(workerId);
+    const worker = await getWorker(workerId);
     if (!worker) {
       return NextResponse.json(
         { success: false, error: "Worker not found" },
@@ -27,9 +23,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Run scheduler to ensure freshest assignments
-    scheduleJobs("worker-poll");
+    await scheduleJobs("worker-poll");
 
-    const assignedJob = Array.from(jobRegistry.values()).find(
+    const jobs = await getAllJobs();
+    const assignedJob = jobs.find(
       (job) => job.status === "ASSIGNED" && job.assignedAgentId === workerId,
     );
 
@@ -45,18 +42,16 @@ export async function GET(request: NextRequest) {
     }
 
     const now = Date.now();
-    assignedJob.status = "RUNNING";
-    assignedJob.startedAt = now;
-    assignedJob.attempts = (assignedJob.attempts || 0) + 1;
-
-    worker.status = "BUSY";
-    worker.currentJobIds = Array.from(
-      new Set([...worker.currentJobIds, assignedJob.jobId]),
-    );
-    worker.updatedAt = now;
-
-    saveJobs();
-    saveWorkers();
+    await updateJobStatus(assignedJob.jobId, "RUNNING", {
+      startedAt: now,
+      attempts: (assignedJob.attempts || 0) + 1,
+    });
+    await updateWorkerStatus(worker.workerId, "BUSY", {
+      currentJobIds: Array.from(
+        new Set([...(worker.currentJobIds ?? []), assignedJob.jobId]),
+      ),
+      updatedAt: now,
+    });
 
     return NextResponse.json({
       success: true,
@@ -68,10 +63,9 @@ export async function GET(request: NextRequest) {
         timeoutMs: assignedJob.timeoutMs,
       },
     });
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: error.message || "Internal server error" },
-      { status: 500 },
-    );
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Internal server error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

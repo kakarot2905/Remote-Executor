@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { jobRegistry } from "@/lib/registries";
+import { getJob } from "@/lib/models/job";
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const job = jobRegistry.get(jobId);
+    const job = await getJob(jobId);
     if (!job) {
       return NextResponse.json(
         { success: false, error: "Job not found" },

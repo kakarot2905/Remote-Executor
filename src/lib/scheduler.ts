@@ -4,16 +4,9 @@
  * to the healthiest available agents based on CPU/RAM availability and load.
  */
 
-import {
-  AgentStatus,
-  JobRecord,
-  JobStatus,
-  WorkerRecord,
-  jobRegistry,
-  saveJobs,
-  saveWorkers,
-  workerRegistry,
-} from "./registries";
+import { AgentStatus, JobRecord, WorkerRecord } from "./types";
+import { getAllWorkers, updateWorkerStatus } from "./models/worker";
+import { getAllJobs, updateJobStatus } from "./models/job";
 
 const HEARTBEAT_TIMEOUT_MS = 30_000; // mark workers offline after this gap
 const AGENT_COOLDOWN_MS = 30_000; // temporary penalty after failures
@@ -21,111 +14,83 @@ const SCHEDULER_INTERVAL_MS = 5_000; // periodic sweep
 
 let schedulerTimer: NodeJS.Timeout | null = null;
 
-const clampNonNegative = (value: number) => (value < 0 ? 0 : value);
+// Helper functions now operate via DB updates directly in the scheduling code.
 
-const releaseJobFromWorker = (worker: WorkerRecord, job: JobRecord) => {
-  worker.currentJobIds = worker.currentJobIds.filter((id) => id !== job.jobId);
-  worker.reservedCpu = clampNonNegative(worker.reservedCpu - job.requiredCpu);
-  worker.reservedRamMb = clampNonNegative(
-    worker.reservedRamMb - job.requiredRamMb,
-  );
-  if (worker.currentJobIds.length === 0 && worker.status !== "OFFLINE") {
-    worker.status = "IDLE";
-  }
-  worker.updatedAt = Date.now();
-};
-
-const requeueJob = (job: JobRecord, reason: string) => {
-  job.assignedAgentId = null;
-  job.assignedAt = null;
-  job.startedAt = null;
-  job.completedAt = null;
-  job.status = "QUEUED";
-  job.queuedAt = Date.now();
-  job.attempts += 1;
-  job.errorMessage = reason;
-};
-
-const markJobFailed = (job: JobRecord, reason: string) => {
-  job.status = "FAILED";
-  job.errorMessage = reason;
-  job.completedAt = Date.now();
-};
-
-const releaseWorkerJobs = (worker: WorkerRecord, reason: string) => {
-  for (const jobId of [...worker.currentJobIds]) {
-    const job = jobRegistry.get(jobId);
-    if (!job) continue;
-
-    releaseJobFromWorker(worker, job);
-
-    if (job.attempts + 1 > job.maxRetries) {
-      markJobFailed(job, `${reason} (max retries reached)`);
-      continue;
-    }
-
-    requeueJob(job, reason);
-  }
-};
-
-const refreshWorkerHealth = (now: number): boolean => {
+const refreshWorkerHealth = async (now: number): Promise<boolean> => {
+  const workers = await getAllWorkers();
   let changed = false;
 
-  workerRegistry.forEach((worker) => {
+  for (const worker of workers) {
     const heartbeatGap = now - worker.lastHeartbeat;
+    let newStatus: AgentStatus | null = null;
+    let healthReason: string | undefined = undefined;
 
     if (worker.cooldownUntil && worker.cooldownUntil > now) {
-      worker.status = "UNHEALTHY";
-      worker.healthReason = "cooldown";
-      changed = true;
-      return;
-    }
-
-    if (heartbeatGap > HEARTBEAT_TIMEOUT_MS) {
+      newStatus = "UNHEALTHY";
+      healthReason = "cooldown";
+    } else if (heartbeatGap > HEARTBEAT_TIMEOUT_MS) {
       if (worker.status !== "OFFLINE") {
-        worker.status = "OFFLINE";
-        worker.healthReason = "heartbeat_timeout";
-        releaseWorkerJobs(worker, "Worker offline: heartbeat timeout");
-        changed = true;
+        newStatus = "OFFLINE";
+        healthReason = "heartbeat_timeout";
+        // Requeue jobs assigned to this worker
+        for (const jobId of worker.currentJobIds || []) {
+          await updateJobStatus(jobId, "QUEUED", {
+            assignedAgentId: null,
+            assignedAt: null,
+            startedAt: null,
+            completedAt: null,
+            queuedAt: now,
+            attempts:
+              typeof (await getAllJobs()).find((j) => j.jobId === jobId)
+                ?.attempts === "number"
+                ? (await getAllJobs()).find((j) => j.jobId === jobId)!
+                    .attempts + 1
+                : 1,
+            errorMessage: "Worker offline: heartbeat timeout",
+          });
+        }
       }
-      return;
+    } else if (worker.status === "OFFLINE" || worker.status === "UNHEALTHY") {
+      newStatus = (worker.currentJobIds?.length ?? 0) === 0 ? "IDLE" : "BUSY";
     }
 
-    // Clear health flags when healthy heartbeats return
-    if (worker.status === "OFFLINE" || worker.status === "UNHEALTHY") {
-      worker.status = worker.currentJobIds.length === 0 ? "IDLE" : "BUSY";
-      worker.healthReason = undefined;
+    if (newStatus && newStatus !== worker.status) {
+      await updateWorkerStatus(worker.workerId, newStatus, { healthReason });
       changed = true;
     }
-  });
+  }
 
   return changed;
 };
 
-const checkRunningJobTimeouts = (now: number): number => {
+const checkRunningJobTimeouts = async (now: number): Promise<number> => {
+  const jobs = await getAllJobs();
   let reclaimed = 0;
 
-  jobRegistry.forEach((job) => {
-    if (job.status !== "RUNNING") return;
-    if (!job.startedAt) return;
+  for (const job of jobs) {
+    if (job.status !== "RUNNING" || !job.startedAt) continue;
 
     if (now - job.startedAt > job.timeoutMs) {
-      const worker = job.assignedAgentId
-        ? workerRegistry.get(job.assignedAgentId)
-        : null;
-
-      if (worker) {
-        releaseJobFromWorker(worker, job);
-      }
-
-      if (job.attempts + 1 > job.maxRetries) {
-        markJobFailed(job, "Execution timeout");
+      const nextAttempts = (job.attempts ?? 0) + 1;
+      if (nextAttempts > job.maxRetries) {
+        await updateJobStatus(job.jobId, "FAILED", {
+          errorMessage: "Execution timeout",
+          completedAt: now,
+        });
       } else {
-        requeueJob(job, "Execution timeout");
+        await updateJobStatus(job.jobId, "QUEUED", {
+          assignedAgentId: null,
+          assignedAt: null,
+          startedAt: null,
+          completedAt: null,
+          queuedAt: now,
+          attempts: nextAttempts,
+          errorMessage: "Execution timeout",
+        });
       }
       reclaimed += 1;
     }
-  });
+  }
 
   return reclaimed;
 };
@@ -165,36 +130,37 @@ const canFitJob = (worker: WorkerRecord, job: JobRecord): boolean => {
   );
 };
 
-const assignQueuedJobs = (now: number): { assigned: number } => {
-  const queuedJobs = Array.from(jobRegistry.values())
+const assignQueuedJobs = async (now: number): Promise<{ assigned: number }> => {
+  const jobs = await getAllJobs();
+  const workers = await getAllWorkers();
+  const queuedJobs = jobs
     .filter((job) => job.status === "QUEUED")
     .sort((a, b) => (a.queuedAt ?? a.createdAt) - (b.queuedAt ?? b.createdAt));
 
   let assigned = 0;
 
   for (const job of queuedJobs) {
-    const candidates = Array.from(workerRegistry.values())
+    const candidates = workers
       .filter((worker) => canFitJob(worker, job))
       .sort((a, b) => computeLoadScore(a) - computeLoadScore(b));
 
-    if (candidates.length === 0) {
-      continue;
-    }
+    if (candidates.length === 0) continue;
 
     const worker = candidates[0];
 
-    // Reserve resources and mark assignment
-    worker.reservedCpu += job.requiredCpu;
-    worker.reservedRamMb += job.requiredRamMb;
-    worker.currentJobIds = Array.from(
-      new Set([...worker.currentJobIds, job.jobId]),
-    );
-    worker.status = "BUSY";
-    worker.updatedAt = now;
+    await updateWorkerStatus(worker.workerId, "BUSY", {
+      reservedCpu: (worker.reservedCpu ?? 0) + job.requiredCpu,
+      reservedRamMb: (worker.reservedRamMb ?? 0) + job.requiredRamMb,
+      currentJobIds: Array.from(
+        new Set([...(worker.currentJobIds ?? []), job.jobId]),
+      ),
+      updatedAt: now,
+    });
 
-    job.status = "ASSIGNED";
-    job.assignedAgentId = worker.workerId;
-    job.assignedAt = now;
+    await updateJobStatus(job.jobId, "ASSIGNED", {
+      assignedAgentId: worker.workerId,
+      assignedAt: now,
+    });
 
     assigned += 1;
   }
@@ -202,49 +168,59 @@ const assignQueuedJobs = (now: number): { assigned: number } => {
   return { assigned };
 };
 
-export const scheduleJobs = (trigger = "manual") => {
+export const scheduleJobs = async (trigger = "manual") => {
   const now = Date.now();
-  const workersUpdated = refreshWorkerHealth(now);
-  const reclaimed = checkRunningJobTimeouts(now);
-  const { assigned } = assignQueuedJobs(now);
-
-  if (workersUpdated || reclaimed > 0 || assigned > 0) {
-    saveWorkers();
-    saveJobs();
-  }
-
+  const workersUpdated = await refreshWorkerHealth(now);
+  const reclaimed = await checkRunningJobTimeouts(now);
+  const { assigned } = await assignQueuedJobs(now);
   return { trigger, workersUpdated, reclaimed, assigned };
 };
 
 export const startSchedulerLoop = () => {
   if (schedulerTimer) return;
-  schedulerTimer = setInterval(
-    () => scheduleJobs("loop"),
-    SCHEDULER_INTERVAL_MS,
-  );
+  schedulerTimer = setInterval(() => {
+    void scheduleJobs("loop");
+  }, SCHEDULER_INTERVAL_MS);
 };
 
-export const recordWorkerFailure = (workerId: string, reason: string) => {
-  const worker = workerRegistry.get(workerId);
-  if (!worker) return;
-
-  worker.status = "UNHEALTHY";
-  worker.cooldownUntil = Date.now() + AGENT_COOLDOWN_MS;
-  worker.healthReason = reason;
-
-  releaseWorkerJobs(worker, reason);
-  saveWorkers();
-  saveJobs();
+export const recordWorkerFailure = async (workerId: string, reason: string) => {
+  const now = Date.now();
+  await updateWorkerStatus(workerId, "UNHEALTHY", {
+    cooldownUntil: now + AGENT_COOLDOWN_MS,
+    healthReason: reason,
+  });
+  // Requeue jobs associated with this worker
+  const workers = await getAllWorkers();
+  const worker = workers.find((w) => w.workerId === workerId);
+  if (worker) {
+    for (const jobId of worker.currentJobIds ?? []) {
+      await updateJobStatus(jobId, "QUEUED", {
+        assignedAgentId: null,
+        assignedAt: null,
+        startedAt: null,
+        completedAt: null,
+        queuedAt: now,
+        errorMessage: reason,
+      });
+    }
+  }
 };
 
-export const releaseJobResources = (jobId: string) => {
-  const job = jobRegistry.get(jobId);
+export const releaseJobResources = async (jobId: string) => {
+  const jobs = await getAllJobs();
+  const job = jobs.find((j) => j.jobId === jobId);
   if (!job || !job.assignedAgentId) return;
-
-  const worker = workerRegistry.get(job.assignedAgentId);
+  const workers = await getAllWorkers();
+  const worker = workers.find((w) => w.workerId === job.assignedAgentId);
   if (!worker) return;
-
-  releaseJobFromWorker(worker, job);
+  await updateWorkerStatus(worker.workerId, worker.status, {
+    currentJobIds: (worker.currentJobIds ?? []).filter(
+      (id) => id !== job.jobId,
+    ),
+    reservedCpu: Math.max((worker.reservedCpu ?? 0) - job.requiredCpu, 0),
+    reservedRamMb: Math.max((worker.reservedRamMb ?? 0) - job.requiredRamMb, 0),
+    updatedAt: Date.now(),
+  });
 };
 
 // Start periodic loop on first import

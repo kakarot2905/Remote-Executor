@@ -174,5 +174,10 @@ export const coerceWorker = (raw: any): WorkerRecord => {
 
     cooldownUntil: raw.cooldownUntil ?? null,
     healthReason: raw.healthReason,
+
+    // Docker container stats (Phase 4)
+    dockerContainers: raw.dockerContainers,
+    dockerCpuUsage: raw.dockerCpuUsage,
+    dockerMemoryMb: raw.dockerMemoryMb,
   };
 };

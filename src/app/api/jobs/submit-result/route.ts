@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  jobRegistry,
-  saveJobs,
-  workerRegistry,
-  saveWorkers,
-} from "@/lib/registries";
+import { getJob, updateJobStatus } from "@/lib/models/job";
+import { getWorker, updateWorkerStatus } from "@/lib/models/worker";
 import {
   recordWorkerFailure,
   releaseJobResources,
@@ -23,7 +19,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const job = jobRegistry.get(jobId);
+    const job = await getJob(jobId);
     if (!job) {
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
@@ -37,35 +33,35 @@ export async function POST(request: NextRequest) {
     }
 
     // Update job with results
-    job.status = "COMPLETED";
-    job.stdout = stdout || "";
-    job.stderr = stderr || "";
-    job.exitCode = exitCode !== undefined ? exitCode : null;
-    job.completedAt = Date.now();
-    job.errorMessage = null;
+    const now = Date.now();
+    await updateJobStatus(jobId, "COMPLETED", {
+      stdout: stdout || "",
+      stderr: stderr || "",
+      exitCode: exitCode !== undefined ? exitCode : null,
+      completedAt: now,
+      errorMessage: null,
+    });
 
     // Release worker resources and mark idle if nothing else is queued
-    releaseJobResources(jobId);
-    const worker = workerRegistry.get(workerId);
-    if (worker && worker.currentJobIds.length === 0) {
-      worker.status = "IDLE";
+    await releaseJobResources(jobId);
+    const worker = await getWorker(workerId);
+    if (worker && (worker.currentJobIds?.length ?? 0) === 0) {
+      await updateWorkerStatus(worker.workerId, "IDLE", {
+        updatedAt: Date.now(),
+      });
     }
 
-    saveJobs();
-    saveWorkers();
-
-    scheduleJobs("job-finished");
+    await scheduleJobs("job-finished");
 
     return NextResponse.json({
       success: true,
       jobId,
       message: "Job result submitted successfully",
     });
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: error.message || "Internal server error" },
-      { status: 500 },
-    );
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Internal server error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -82,36 +78,37 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    const job = jobRegistry.get(jobId);
+    const job = await getJob(jobId);
     if (!job) {
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
 
     // Penalize worker and requeue/mark failed depending on retries
-    recordWorkerFailure(workerId, errorMessage || "Worker reported failure");
+    await recordWorkerFailure(
+      workerId,
+      errorMessage || "Worker reported failure",
+    );
 
     // Reload job after recordWorkerFailure may have updated state
-    const refreshedJob = jobRegistry.get(jobId);
+    const refreshedJob = await getJob(jobId);
     if (refreshedJob && refreshedJob.status !== "FAILED") {
-      refreshedJob.errorMessage = errorMessage || refreshedJob.errorMessage;
+      await updateJobStatus(jobId, refreshedJob.status, {
+        errorMessage: errorMessage || refreshedJob.errorMessage || undefined,
+      });
     }
 
-    releaseJobResources(jobId);
+    await releaseJobResources(jobId);
 
-    saveJobs();
-    saveWorkers();
-
-    scheduleJobs("job-failed");
+    await scheduleJobs("job-failed");
 
     return NextResponse.json({
       success: true,
       jobId,
       message: "Job failure recorded successfully",
     });
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: error.message || "Internal server error" },
-      { status: 500 },
-    );
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Internal server error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

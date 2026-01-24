@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  workerRegistry,
-  saveWorkers,
-  WorkerRecord,
-  AgentStatus,
-} from "@/lib/registries";
 import { scheduleJobs } from "@/lib/scheduler";
+import { WorkerRecord, AgentStatus } from "@/lib/types";
+import { saveWorker } from "@/lib/models/worker";
 
 export async function POST(request: NextRequest) {
   try {
@@ -54,8 +50,7 @@ export async function POST(request: NextRequest) {
       cooldownUntil: null,
     };
 
-    workerRegistry.set(workerId, workerInfo);
-    saveWorkers();
+    await saveWorker(workerInfo);
 
     // Kick scheduler in case queued jobs are waiting
     scheduleJobs("worker-register");
@@ -65,16 +60,17 @@ export async function POST(request: NextRequest) {
       workerId,
       message: `Worker ${workerId} registered successfully`,
     });
-  } catch (error: any) {
+  } catch (error) {
     return NextResponse.json(
-      { error: error.message || "Internal server error" },
+      {
+        error: error instanceof Error ? error.message : "Internal server error",
+      },
       { status: 500 },
     );
   }
 }
 
-export async function GET(request: NextRequest) {
-  // Return list of all workers (admin endpoint)
-  const workers = Array.from(workerRegistry.values());
-  return NextResponse.json({ workers, count: workers.length });
+export async function GET() {
+  // Deprecated: use /api/workers/list for listing workers
+  return NextResponse.json({ error: "Use /api/workers/list" }, { status: 410 });
 }

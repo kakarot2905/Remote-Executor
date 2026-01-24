@@ -1,9 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
-import { workerRegistry } from "@/lib/registries";
+import { NextResponse } from "next/server";
+import { getAllWorkers } from "@/lib/models/worker";
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    const workers = Array.from(workerRegistry.values()).map((worker) => ({
+    const dbWorkers = await getAllWorkers();
+    const workers = dbWorkers.map((worker) => ({
       workerId: worker.workerId,
       status: worker.status,
       hostname: worker.hostname,

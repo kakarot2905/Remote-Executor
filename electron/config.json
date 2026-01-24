@@ -1,5 +1,5 @@
 {
-  "serverUrl": "https://remote-executor-7gywsoeva-kakarots-projects-312c6349.vercel.app/",
+  "serverUrl": "http://localhost:3000/",
   "workerId": "",
   "hostname": "",
   "dockerTimeout": "300000",

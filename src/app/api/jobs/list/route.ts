@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { jobRegistry } from "@/lib/registries";
+import { getAllJobs } from "@/lib/models/job";
 import { authenticateUser } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
@@ -10,8 +10,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Convert Map to array of objects
-    const jobs = Array.from(jobRegistry.values()).map((job) => ({
+    const jobs = (await getAllJobs()).map((job) => ({
       jobId: job.jobId,
       id: job.jobId, // Alias for compatibility
       command: job.command,
@@ -32,11 +31,10 @@ export async function GET(request: NextRequest) {
     }));
 
     return NextResponse.json(jobs);
-  } catch (error: any) {
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to fetch jobs";
     console.error("Error fetching jobs:", error);
-    return NextResponse.json(
-      { error: error.message || "Failed to fetch jobs" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

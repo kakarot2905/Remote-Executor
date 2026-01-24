@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { jobRegistry, saveJobs } from "@/lib/registries";
+import { getJob, updateJobStatus } from "@/lib/models/job";
 
 export async function POST(request: NextRequest) {
   try {
@@ -9,30 +9,29 @@ export async function POST(request: NextRequest) {
     if (!jobId || !data || !type) {
       return NextResponse.json(
         { success: false, error: "Missing required fields" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    const job = jobRegistry.get(jobId);
+    const job = await getJob(jobId);
     if (!job) {
       return NextResponse.json(
         { success: false, error: "Job not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
     // Append streamed data to job output in real-time
+    const now = Date.now();
+    const updates: Partial<typeof job> = {};
     if (type === "stdout") {
-      job.stdout = (job.stdout || "") + data;
+      updates.stdout = (job.stdout || "") + data;
     } else if (type === "stderr") {
-      job.stderr = (job.stderr || "") + data;
+      updates.stderr = (job.stderr || "") + data;
     }
+    updates.lastStreamedAt = now;
 
-    // Update last modified timestamp
-    job.lastStreamedAt = Date.now();
-
-    // Save to persist the streamed output
-    await saveJobs();
+    await updateJobStatus(job.jobId, job.status, updates);
 
     return NextResponse.json({
       success: true,
@@ -42,7 +41,7 @@ export async function POST(request: NextRequest) {
     console.error("Stream output error:", error);
     return NextResponse.json(
       { success: false, error: "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -169,19 +169,75 @@ export default function AvailableNodes() {
                   <span className="font-mono font-bold text-green-300">
                     {worker.workerId}
                   </span>
-                  <span
-                    className={`px-2 py-0.5 rounded ${
-                      isOffline
-                        ? "bg-gray-700 text-gray-400"
-                        : worker.status === "IDLE"
-                          ? "bg-green-900 text-green-300"
-                          : worker.status === "BUSY"
-                            ? "bg-yellow-900 text-yellow-300"
-                            : "bg-orange-900 text-orange-200"
-                    }`}
-                  >
-                    {statusLabel}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`px-2 py-0.5 rounded ${
+                        isOffline
+                          ? "bg-gray-700 text-gray-400"
+                          : worker.status === "IDLE"
+                            ? "bg-green-900 text-green-300"
+                            : worker.status === "BUSY"
+                              ? "bg-yellow-900 text-yellow-300"
+                              : "bg-orange-900 text-orange-200"
+                      }`}
+                    >
+                      {statusLabel}
+                    </span>
+                    <button
+                      className="px-2 py-0.5 rounded bg-red-900 text-red-300 hover:bg-red-800"
+                      title="Delete node"
+                      onClick={async () => {
+                        const confirmDelete = window.confirm(
+                          `Delete worker ${worker.workerId}? This cannot be undone.`,
+                        );
+                        if (!confirmDelete) return;
+                        try {
+                          const res = await fetch(
+                            `/api/workers/${worker.workerId}`,
+                            {
+                              method: "DELETE",
+                            },
+                          );
+                          if (!res.ok) {
+                            const data = await res.json().catch(() => ({}));
+                            throw new Error(
+                              data.error || "Failed to delete worker",
+                            );
+                          }
+                          // Optimistically update UI
+                          setWorkers((prev) =>
+                            prev.filter((w) => w.workerId !== worker.workerId),
+                          );
+                          setStats((prev) => ({
+                            ...prev,
+                            total: Math.max(0, prev.total - 1),
+                            idle: Math.max(
+                              0,
+                              prev.idle - (worker.status === "IDLE" ? 1 : 0),
+                            ),
+                            busy: Math.max(
+                              0,
+                              prev.busy - (worker.status === "BUSY" ? 1 : 0),
+                            ),
+                            unhealthy: Math.max(
+                              0,
+                              prev.unhealthy -
+                                (worker.status === "UNHEALTHY" ? 1 : 0),
+                            ),
+                          }));
+                        } catch (err) {
+                          console.error("Failed to delete worker:", err);
+                          alert(
+                            err instanceof Error
+                              ? err.message
+                              : "Failed to delete worker",
+                          );
+                        }
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
 
                 {/* Worker Details */}
@@ -211,8 +267,7 @@ export default function AvailableNodes() {
 
                   {(worker.dockerContainers ?? 0) > 0 && (
                     <div className="text-blue-400 text-1">
-                       CPU:{" "}
-                      {worker.dockerCpuUsage ?? 0}% | RAM:{" "}
+                      CPU: {worker.dockerCpuUsage ?? 0}% | RAM:{" "}
                       {worker.dockerMemoryMb ?? 0} MB
                     </div>
                   )}

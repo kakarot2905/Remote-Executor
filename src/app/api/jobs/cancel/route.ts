@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  jobRegistry,
-  workerRegistry,
-  saveJobs,
-  saveWorkers,
-} from "@/lib/registries";
+import { getJob, updateJobStatus } from "@/lib/models/job";
+import { getWorker, updateWorkerStatus } from "@/lib/models/worker";
 import { releaseJobResources, scheduleJobs } from "@/lib/scheduler";
 
 export async function POST(request: NextRequest) {
@@ -19,7 +15,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const job = jobRegistry.get(jobId);
+    const job = await getJob(jobId);
     if (!job) {
       return NextResponse.json(
         { success: false, error: "Job not found" },
@@ -29,8 +25,7 @@ export async function POST(request: NextRequest) {
 
     // If job is running, mark for cancellation so worker can kill container
     if (job.status === "RUNNING") {
-      job.cancelRequested = true;
-      await saveJobs();
+      await updateJobStatus(jobId, job.status, { cancelRequested: true });
 
       return NextResponse.json({
         success: true,
@@ -40,24 +35,26 @@ export async function POST(request: NextRequest) {
     }
 
     // If job is queued/assigned, cancel immediately and free resources
-    job.status = "FAILED";
-    job.errorMessage = "Job cancelled by user";
-    job.completedAt = Date.now();
-    job.cancelRequested = true;
-
+    const now = Date.now();
     const workerId = job.assignedAgentId;
-    releaseJobResources(job.jobId);
 
-    job.assignedAgentId = null;
+    await updateJobStatus(jobId, "FAILED", {
+      errorMessage: "Job cancelled by user",
+      completedAt: now,
+      cancelRequested: true,
+      assignedAgentId: null,
+    });
 
-    const worker = workerId ? workerRegistry.get(workerId) : null;
-    if (worker && worker.currentJobIds.length === 0) {
-      worker.status = "IDLE";
+    await releaseJobResources(jobId);
+
+    if (workerId) {
+      const worker = await getWorker(workerId);
+      if (worker && (worker.currentJobIds?.length ?? 0) === 0) {
+        await updateWorkerStatus(worker.workerId, "IDLE", { updatedAt: now });
+      }
     }
 
-    await saveJobs();
-    await saveWorkers();
-    scheduleJobs("job-cancelled");
+    await scheduleJobs("job-cancelled");
 
     return NextResponse.json({
       success: true,

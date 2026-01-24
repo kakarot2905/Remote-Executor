@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { workerRegistry, saveWorkers, AgentStatus } from "@/lib/registries";
 import { scheduleJobs } from "@/lib/scheduler";
+import { AgentStatus, WorkerRecord } from "@/lib/types";
+import {
+  getWorker,
+  updateWorkerHeartbeat,
+  updateWorkerStatus,
+} from "@/lib/models/worker";
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,7 +28,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const worker = workerRegistry.get(workerId);
+    const worker = await getWorker(workerId);
     if (!worker) {
       return NextResponse.json({ error: "Worker not found" }, { status: 404 });
     }
@@ -34,28 +39,36 @@ export async function POST(request: NextRequest) {
         ? status
         : "IDLE";
 
-    worker.cpuUsage = Number(cpuUsage) || 0;
-    worker.ramFreeMb =
-      ramFreeMb !== undefined
-        ? Math.max(0, Math.round(Number(ramFreeMb)))
-        : worker.ramFreeMb;
-    worker.ramTotalMb =
-      ramTotalMb !== undefined
-        ? Math.max(0, Math.round(Number(ramTotalMb)))
-        : worker.ramTotalMb;
-    worker.status = normalizedStatus;
-    worker.lastHeartbeat = now;
-    worker.updatedAt = now;
+    const updates: Partial<WorkerRecord> = {
+      cpuUsage: Number(cpuUsage) || 0,
+      ramFreeMb:
+        ramFreeMb !== undefined
+          ? Math.max(0, Math.round(Number(ramFreeMb)))
+          : worker.ramFreeMb,
+      ramTotalMb:
+        ramTotalMb !== undefined
+          ? Math.max(0, Math.round(Number(ramTotalMb)))
+          : worker.ramTotalMb,
+      lastHeartbeat: now,
+      updatedAt: now,
+      dockerContainers:
+        dockerContainers !== undefined
+          ? Number(dockerContainers)
+          : (worker.dockerContainers ?? 0),
+      dockerCpuUsage:
+        dockerCpuUsage !== undefined
+          ? Number(dockerCpuUsage)
+          : (worker.dockerCpuUsage ?? 0),
+      dockerMemoryMb:
+        dockerMemoryMb !== undefined
+          ? Number(dockerMemoryMb)
+          : (worker.dockerMemoryMb ?? 0),
+    };
 
-    // Update Docker container stats
-    worker.dockerContainers =
-      dockerContainers !== undefined ? Number(dockerContainers) : 0;
-    worker.dockerCpuUsage =
-      dockerCpuUsage !== undefined ? Number(dockerCpuUsage) : 0;
-    worker.dockerMemoryMb =
-      dockerMemoryMb !== undefined ? Number(dockerMemoryMb) : 0;
-
-    saveWorkers();
+    await updateWorkerHeartbeat(workerId, updates);
+    if (worker.status !== normalizedStatus) {
+      await updateWorkerStatus(workerId, normalizedStatus);
+    }
     scheduleJobs("heartbeat");
 
     return NextResponse.json({
@@ -63,9 +76,12 @@ export async function POST(request: NextRequest) {
       workerId,
       timestamp: worker.lastHeartbeat,
     });
-  } catch (error: any) {
+  } catch (error) {
+    console.error("[Heartbeat] Error processing heartbeat:", error);
     return NextResponse.json(
-      { error: error.message || "Internal server error" },
+      {
+        error: error instanceof Error ? error.message : "Internal server error",
+      },
       { status: 500 },
     );
   }

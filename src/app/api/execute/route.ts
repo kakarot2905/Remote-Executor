@@ -290,8 +290,8 @@ async function handleDistributedExecution(
       .toString(36)
       .substr(2, 9)}`;
 
-    // Create a job in the registry
-    const { jobRegistry, saveJobs } = await import("@/lib/registries");
+    // Persist job to MongoDB (no in-memory registry)
+    const { saveJob } = await import("@/lib/models/job");
     const now = Date.now();
     const job = {
       jobId,
@@ -317,8 +317,7 @@ async function handleDistributedExecution(
       maxRetries: 3,
     };
 
-    jobRegistry.set(jobId, job);
-    saveJobs();
+    await saveJob(job as import("@/lib/types").JobRecord);
     scheduleJobs("distributed-upload");
 
     // Return job ID to client for polling

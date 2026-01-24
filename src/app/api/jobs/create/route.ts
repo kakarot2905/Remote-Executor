@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { jobRegistry, saveJobs } from "@/lib/registries";
+import { saveJob } from "@/lib/models/job";
 import { scheduleJobs } from "@/lib/scheduler";
 import { authenticateUser } from "@/lib/auth";
 
@@ -61,20 +61,18 @@ export async function POST(request: NextRequest) {
       maxRetries: maxRetries !== undefined ? Number(maxRetries) : 3,
     };
 
-    jobRegistry.set(jobId, job);
-    saveJobs();
-    scheduleJobs("job-created");
+    await saveJob(job);
+    await scheduleJobs("job-created");
 
     return NextResponse.json({
       success: true,
       jobId,
       message: "Job created successfully",
     });
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: error.message || "Internal server error" },
-      { status: 500 },
-    );
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Internal server error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -85,7 +83,13 @@ export async function GET(request: NextRequest) {
     return auth.response;
   }
 
-  // Return list of all jobs (admin endpoint)
-  const jobs = Array.from(jobRegistry.values());
-  return NextResponse.json({ jobs, count: jobs.length });
+  try {
+    const { getAllJobs } = await import("@/lib/models/job");
+    const jobs = await getAllJobs();
+    return NextResponse.json({ jobs, count: jobs.length });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Internal server error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }

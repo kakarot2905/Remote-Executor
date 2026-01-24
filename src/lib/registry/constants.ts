@@ -7,35 +7,6 @@
  * @module registries/constants
  */
 
-import path from "path";
-import os from "os";
-
-// ============================================================================
-// STORAGE PATHS
-// ============================================================================
-
-/**
- * Get path to persistent job storage file
- *
- * Located in system temp directory to survive application restarts.
- * Format: `/tmp/cmd-executor-jobs.json` on Unix, `C:\Users\...\AppData\Local\Temp\...` on Windows
- *
- * @returns {string} Absolute path to job storage file
- */
-export const getJobStoragePath = () =>
-  path.join(os.tmpdir(), "cmd-executor-jobs.json");
-
-/**
- * Get path to persistent worker storage file
- *
- * Located in system temp directory to survive application restarts.
- * Format: `/tmp/cmd-executor-workers.json` on Unix, `C:\Users\...\AppData\Local\Temp\...` on Windows
- *
- * @returns {string} Absolute path to worker storage file
- */
-export const getWorkerStoragePath = () =>
-  path.join(os.tmpdir(), "cmd-executor-workers.json");
-
 // ============================================================================
 // JOB EXECUTION DEFAULTS
 // ============================================================================

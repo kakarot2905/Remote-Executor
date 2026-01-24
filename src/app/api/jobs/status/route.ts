@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { jobRegistry } from "@/lib/registries";
+import { getJob } from "@/lib/models/job";
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "jobId is required" }, { status: 400 });
     }
 
-    const job = jobRegistry.get(jobId);
+    const job = await getJob(jobId);
     if (!job) {
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
@@ -36,10 +36,9 @@ export async function GET(request: NextRequest) {
       requiredRamMb: job.requiredRamMb,
       timeoutMs: job.timeoutMs,
     });
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: error.message || "Internal server error" },
-      { status: 500 },
-    );
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Internal server error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

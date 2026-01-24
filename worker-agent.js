@@ -629,7 +629,6 @@ const downloadFile = (url, filePath, workerToken, redirectCount = 0) => {
         const urlObj = new URL(url);
         const options = {
             hostname: urlObj.hostname,
-            port: urlObj.port,
             path: urlObj.pathname + urlObj.search,
             headers: {
                 "User-Agent": `cmd-executor-worker/${WORKER_VERSION}`,
@@ -637,6 +636,11 @@ const downloadFile = (url, filePath, workerToken, redirectCount = 0) => {
                 "X-Worker-Token": workerToken,
             },
         };
+
+        // Only set port if it's not empty (URLs without explicit ports have empty string port)
+        if (urlObj.port) {
+            options.port = urlObj.port;
+        }
 
         // Add Vercel bypass token if available
         if (VERCEL_BYPASS_TOKEN) {
@@ -657,7 +661,8 @@ const downloadFile = (url, filePath, workerToken, redirectCount = 0) => {
             // Handle redirects (301, 302, 307, 308)
             if ([301, 302, 307, 308].includes(res.statusCode) && res.headers.location) {
                 if (redirectCount >= MAX_REDIRECTS) {
-                    file.close();
+                    file.destroy();
+                    res.resume(); // Consume response to free socket
                     reject(new Error(`Too many redirects (${MAX_REDIRECTS})`));
                     return;
                 }
@@ -665,8 +670,9 @@ const downloadFile = (url, filePath, workerToken, redirectCount = 0) => {
                 const redirectUrl = new URL(res.headers.location, url);
                 log(`[Download] Following redirect to: ${redirectUrl.href}`, "INFO");
 
-                // Close the file stream since we're not using it
-                file.close();
+                // Destroy the file stream and consume the response
+                file.destroy();
+                res.resume(); // Consume response to free socket
 
                 // Follow redirect
                 downloadFile(redirectUrl.href, filePath, workerToken, redirectCount + 1)
@@ -676,7 +682,7 @@ const downloadFile = (url, filePath, workerToken, redirectCount = 0) => {
             }
 
             if (res.statusCode !== 200) {
-                file.close();
+                file.destroy();
                 // Capture response body for error details
                 let errorBody = "";
                 res.on("data", (chunk) => {
@@ -698,19 +704,18 @@ const downloadFile = (url, filePath, workerToken, redirectCount = 0) => {
         });
 
         file.on("finish", () => {
-            file.close();
             log(`[Download] Complete: ${bytesReceived} bytes received`, "SUCCESS");
             resolve();
         });
 
         file.on("error", (err) => {
-            file.close();
+            file.destroy();
             log(`[Download] File write error: ${err.message}`, "ERROR");
             reject(err);
         });
 
         req.on("error", (err) => {
-            file.close();
+            file.destroy();
             log(`[Download] Request error: ${err.message}`, "ERROR");
             reject(err);
         });

@@ -114,8 +114,7 @@ export default function TerminalInterface({
     const file = e.target.files?.[0];
     if (file) {
       setSelectedFile(file);
-      setStatusMessage(`File selected: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`);
-      setStatusType("info");
+      addLog(`File selected: ${file.name}`, "info");
     }
   };
 

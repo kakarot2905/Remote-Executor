@@ -51,3 +51,7 @@ public/uploads/
 # Temporary files
 *.tmp
 *.temp
+
+# Electron build output
+/dist-electron/
+/dist/

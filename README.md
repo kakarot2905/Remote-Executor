@@ -1,317 +1,671 @@
-# Distributed Command Executor - Phase 2
+# CMD Executor - Distributed Command Execution System
 
-A distributed computing system where idle PCs work together as "worker nodes" to execute remote commands submitted via a web interface.
+A production-ready distributed computing platform that transforms idle workstations into a coordinated network of worker nodes. Designed for teams needing to distribute computational tasks across available hardware without complex infrastructure.
 
-## What This Is
+## 📋 Table of Contents
 
-**Phase 2** transforms a simple command executor into a **decentralized distributed system**:
+- [Overview](#overview)
+- [Quick Start](#quick-start)
+- [Architecture](#architecture)
+- [Installation](#installation)
+- [Usage](#usage)
+- [API Reference](#api-reference)
+- [Configuration](#configuration)
+- [Deployment](#deployment)
+- [Troubleshooting](#troubleshooting)
 
-- **Phase 1** (existing): Server executes commands locally
-- **Phase 2** (new): Remote workers pull and execute jobs
+---
 
-Perfect for:
+## Overview
 
-- Leveraging idle company PCs for batch processing
-- Distributing build/test jobs across available hardware
-- Simple task queuing without Kubernetes or complex infrastructure
+### What is CMD Executor?
 
-## Quick Start (5 Minutes)
+CMD Executor is a distributed command execution system consisting of:
+
+- **Central Server** (Next.js) - Web UI, job orchestration, worker management
+- **Worker Agents** (Node.js) - Execute tasks on remote machines
+- **Web Interface** (React) - Submit commands, monitor progress, view results
+
+### Key Features
+
+✅ **Distributed Execution** - Commands run on remote workers, not the server  
+✅ **Auto-Registration** - Workers register automatically with persistent IDs  
+✅ **Health Monitoring** - Real-time heartbeat detection  
+✅ **Job Queue** - FIFO job assignment with fair distribution  
+✅ **File Transfer** - ZIP upload support for project dependencies  
+✅ **Real-time Output** - Stream stdout/stderr as jobs execute  
+✅ **Persistent Storage** - MongoDB for jobs and results  
+✅ **Caching Layer** - Redis for performance  
+✅ **Authentication** - JWT + HMAC token support  
+✅ **Cross-Platform** - Windows, macOS, Linux support  
+
+### Use Cases
+
+- **Build Distribution** - Distribute compilation across multiple machines
+- **Test Execution** - Run test suites in parallel
+- **Batch Processing** - Process large datasets across available hardware
+- **Resource Optimization** - Leverage idle workstations
+- **CI/CD Integration** - Distributed job execution for pipelines
+
+---
 
 ### Prerequisites
 
-- Node.js 18+
-- npm or yarn
+- **Node.js** 18.x or higher
+- **npm** or **yarn**
+- **MongoDB** (local or remote)
+- **Redis** (optional, for caching)
 
-### Terminal 1: Start Server
+### 5-Minute Setup
+
+#### Step 1: Clone and Install
+
+```bash
+git clone <repo-url>
+cd cmd-executor
+npm install
+```
+
+#### Step 2: Configure Environment
+
+Create `.env.local`:
+
+```env
+# Database
+MONGODB_URI=mongodb://localhost:27017
+MONGODB_DB=cmd_executor
+
+# Redis (optional)
+REDIS_URL=redis://localhost:6379
+
+# Security
+JWT_SECRET=your-random-secret-key-here
+WORKER_TOKEN_SECRET=another-secret-key
+JWT_EXPIRES_IN=24h
+
+# CORS
+ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001
+```
+
+#### Step 3: Start Server (Terminal 1)
 
 ```bash
 npm run dev
 # Server runs on http://localhost:3000
 ```
 
-### Terminal 2: Start Worker
+#### Step 4: Start Worker (Terminal 2)
 
 ```bash
 node worker-agent.js --server http://localhost:3000
 # Worker registers and waits for jobs
 ```
 
-### Terminal 3: Use Web UI
+#### Step 5: Use Web UI (Browser)
 
-1. Open http://localhost:3000
-2. Select **"Distributed"** mode (top section)
+1. Open `http://localhost:3000`
+2. Click **"Distributed"** mode
 3. Upload a ZIP file with your project
-4. Enter commands to execute
+4. Enter command: `npm test` or `npm run build`
 5. Click **"Execute"**
-6. Watch results appear in real-time
+6. View real-time results
 
-## Key Features
+---
 
-✅ **Decentralized Execution** - Commands run on remote workers, not the server
-✅ **Auto-Registration** - Workers register on startup with persistent IDs  
-✅ **Health Monitoring** - Heartbeat detection for offline workers
-✅ **Job Queue** - FIFO job assignment to idle workers
-✅ **Isolation** - Each job runs in its own temporary directory
-✅ **Full Output** - Capture stdout, stderr, and exit codes
-✅ **Simple APIs** - HTTP-based, works across firewalls
-✅ **Backward Compatible** - Phase 1 "Direct" mode still works
+## Architecture
 
-## System Architecture
+### System Flow Diagram
 
 ```
-Web UI (React)           Central Server (Next.js)        Worker Agents (Node.js)
-└─ File Upload      ─┬─  └─ Worker Registry    ─┬─  └─ Auto-Register
-  ─ Commands        │     └─ Job Queue          │     └─ Heartbeat
-  ─ Mode Toggle     │     └─ File Storage       │     └─ Job Polling
-  ─ Polling         │     └─ Results Storage    │     └─ Execution
-                    │                           │     └─ Cleanup
-                    └─ HTTP (Pull Model)  ──────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                          WEB INTERFACE (React)                       │
+│  ┌──────────────┬──────────────┬──────────────┬──────────────────┐  │
+│  │ File Upload  │ Command Form │ Job Status   │ Real-time Output │  │
+│  │ (ZIP files)  │ (Direct Mode)│ (Polling)    │ (WebSocket)      │  │
+│  └──────────────┴──────────────┴──────────────┴──────────────────┘  │
+└────────────────────┬────────────────────────────────────────────────┘
+                     │
+                ┌────▼────────────────────────────────────────┐
+                │    CENTRAL SERVER (Next.js + Express)       │
+                ├───────────────────────────────────────────┤
+                │ • Worker Registry & Management             │
+                │ • Job Queue & Assignment                   │
+                │ • File Storage (Uploaded ZIPs)             │
+                │ • Result Aggregation                       │
+                │ • Authentication & Rate Limiting           │
+                │ • Real-time Output Streaming               │
+                └────┬──────────────────────────────────────┘
+                     │
+        ┌────────────┼────────────┐
+        │            │            │
+   ┌────▼────┐  ┌───▼─────┐  ┌──▼───────┐
+   │MongoDB  │  │  Redis  │  │ File     │
+   │(Jobs)   │  │(Cache)  │  │ Storage  │
+   │(Results)│  │         │  │(Uploads) │
+   └─────────┘  └─────────┘  └──────────┘
+        │
+        │ HTTP (Pull Model)
+        │
+   ┌────┴───────────────────────────────────────┐
+   │      WORKER AGENTS (Node.js)               │
+   │  ┌──────────────────────────────────────┐  │
+   │  │ Machine 1: Windows          [Idle]   │  │
+   │  │ • Auto-register on startup           │  │
+   │  │ • Poll for jobs every 5s             │  │
+   │  │ • Execute commands                   │  │
+   │  │ • Stream output back to server       │  │
+   │  │ • Cleanup temp files                 │  │
+   │  └──────────────────────────────────────┘  │
+   │  ┌──────────────────────────────────────┐  │
+   │  │ Machine 2: macOS            [Busy]   │  │
+   │  │ • Processing job from queue          │  │
+   │  └──────────────────────────────────────┘  │
+   │  ┌──────────────────────────────────────┐  │
+   │  │ Machine 3: Linux            [Idle]   │  │
+   │  │ • Waiting for assignments            │  │
+   │  └──────────────────────────────────────┘  │
+   └────────────────────────────────────────────┘
 ```
 
-## Documentation
+### Component Breakdown
 
-| Document                                           | Contains                          |
-| -------------------------------------------------- | --------------------------------- |
-| [QUICK_REFERENCE.md](QUICK_REFERENCE.md)           | ⚡ Quick commands and APIs        |
-| [PHASE_2_README.md](PHASE_2_README.md)             | 📚 Full architecture guide        |
-| [API_REFERENCE.md](API_REFERENCE.md)               | 📖 Complete API documentation     |
-| [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md) | 🔧 Code structure & customization |
-| [DEPLOYMENT_SUMMARY.md](DEPLOYMENT_SUMMARY.md)     | 📋 Overview & setup checklist     |
-| [CHECKLIST.md](CHECKLIST.md)                       | ✅ Implementation completeness    |
-
-## Core APIs
-
-### Register Worker
-
-```bash
-POST /api/workers/register
-{ "workerId": "...", "hostname": "...", "cpuCount": 4 }
-```
-
-### Get Next Job (Worker)
-
-```bash
-GET /api/jobs/get-job
-# Returns: { "jobId": "...", "command": "...", "fileUrl": "..." }
-```
-
-### Check Job Status
-
-```bash
-GET /api/jobs/status?jobId=job-...
-# Returns: { "status": "completed", "stdout": "...", "exitCode": 0 }
-```
-
-### Submit Results
-
-```bash
-POST /api/jobs/submit-result
-{ "jobId": "...", "workerId": "...", "stdout": "...", "exitCode": 0 }
-```
-
-**Full API docs**: See [API_REFERENCE.md](API_REFERENCE.md)
-
-## Running the System
-
-### Single Worker Test
-
-```bash
-# Terminal 1
-npm run dev
-
-# Terminal 2
-node worker-agent.js
-
-# Terminal 3: Open browser to http://localhost:3000
-```
-
-### Multiple Workers
-
-```bash
-# Terminal 1: Server
-npm run dev
-
-# Terminal 2: Worker 1
-node worker-agent.js
-
-# Terminal 3: Worker 2
-node worker-agent.js --server http://localhost:3000
-
-# Terminal 4: Worker 3
-WORKER_ID=custom-worker-3 node worker-agent.js
-
-# Terminal 5: Upload jobs via http://localhost:3000
-```
-
-### Demo Script
-
-```bash
-node quickstart.js
-# Interactive demo with example job
-```
-
-### Linux/macOS Setup Helper
-
-```bash
-chmod +x setup-demo.sh
-./setup-demo.sh
-# Menu-driven setup and testing
-```
-
-## Project Structure
+#### Central Server (`/src`)
 
 ```
-cmd-executor/
-├── src/app/
+src/
+├── app/
 │   ├── api/
-│   │   ├── workers/
-│   │   │   ├── register/route.ts      [Worker registration]
-│   │   │   └── heartbeat/route.ts     [Heartbeat updates]
-│   │   ├── jobs/
-│   │   │   ├── create/route.ts        [Job creation]
-│   │   │   ├── get-job/route.ts       [Job assignment]
-│   │   │   ├── submit-result/route.ts [Result submission]
-│   │   │   └── status/route.ts        [Job status]
-│   │   └── execute/route.ts           [Dual-mode execution]
-│   └── components/
-│       └── TerminalInterface.tsx      [Web UI with mode toggle]
-├── public/uploads/                    [Uploaded files storage]
-├── worker-agent.js                    [Standalone worker process]
-├── quickstart.js                      [Demo script]
-├── PHASE_2_README.md                  [Architecture docs]
-├── API_REFERENCE.md                   [API documentation]
-├── IMPLEMENTATION_GUIDE.md            [Code guide]
-└── QUICK_REFERENCE.md                 [Quick commands]
+│   │   ├── auth/          # JWT validation, token generation
+│   │   ├── workers/       # Worker registration, heartbeat, list
+│   │   ├── jobs/          # Job submission, status, results
+│   │   ├── files/         # File upload, download
+│   │   └── execute/       # Direct execution (legacy)
+│   ├── components/        # React components
+│   ├── login/             # Authentication UI
+│   └── page.tsx           # Main dashboard
+├── lib/
+│   ├── auth.ts            # JWT/HMAC authentication
+│   ├── config.ts          # Environment configuration
+│   ├── types.ts           # TypeScript interfaces
+│   ├── db/
+│   │   ├── mongodb.ts     # MongoDB connection & queries
+│   │   └── redis.ts       # Redis client & caching
+│   └── jobs.ts            # Job management logic
+├── middleware.ts          # Request preprocessing
+└── (additional files)
 ```
 
-## Configuration
+#### Worker Agent (`worker-agent.js`)
 
-### Worker Agent Options
+```
+worker-agent.js
+├── Initialization
+│   ├── Generate unique workerId
+│   ├── Detect system info (CPU, RAM, OS)
+│   └── Register with server
+├── Job Loop (runs every 5 seconds)
+│   ├── Poll server for new job
+│   ├── Download file if needed
+│   ├── Extract ZIP
+│   ├── Execute command
+│   ├── Stream output in real-time
+│   ├── Upload results
+│   └── Cleanup temp files
+└── Heartbeat (every 30 seconds)
+    ├── Report worker status
+    └── Confirm availability
+```
+
+---
+
+## Installation
+
+### Development Setup
 
 ```bash
-# Custom worker ID
-WORKER_ID=my-worker-1 node worker-agent.js
+# Install dependencies
+npm install
 
-# Custom hostname
-HOSTNAME=my-pc node worker-agent.js
+# Create database (MongoDB local)
+mongod --dbpath ./data
 
-# Custom server
-node worker-agent.js --server http://example.com:3000
+# Start development server
+npm run dev
 
-# All together
-WORKER_ID=w1 HOSTNAME=pc1 node worker-agent.js --server http://server:3000
+# In another terminal, start worker
+node worker-agent.js --server http://localhost:3000
 ```
 
-### Timing (in source code)
+### Production Setup
 
-```javascript
-// Worker agent polls every 5 seconds
-const JOB_POLL_INTERVAL = 5000;
+See deployment section below for Docker, Kubernetes, and cloud deployment guides.
 
-// Worker sends heartbeat every 10 seconds
-const HEARTBEAT_INTERVAL = 10000;
+---
 
-// Server marks worker offline after 30 seconds
-const heartbeatTimeout = 30000;
-```
+## Usage
 
-## Examples
+### Web Interface
 
-### Create Job via API
+1. **Dashboard** - View all registered workers and job queue
+2. **Submit Job** - Upload files and enter execution command
+3. **Monitor Progress** - Real-time stdout/stderr streaming
+4. **View Results** - Download execution results and logs
+
+### Command Line (Worker)
 
 ```bash
-curl -X POST http://localhost:3000/api/jobs/create \
+# Start worker
+node worker-agent.js \
+  --server http://localhost:3000 \
+  --token <worker-token> \
+  --max-parallel 2
+
+# Options:
+# --server       Server URL (required)
+# --token        Worker token for authentication (optional)
+# --max-parallel Number of parallel jobs (default: 1)
+# --timeout      Job timeout in seconds (default: 3600)
+```
+
+### API Examples
+
+#### Register Worker
+
+```bash
+curl -X POST http://localhost:3000/api/workers/register \
   -H "Content-Type: application/json" \
   -d '{
-    "command": "npm install && npm test",
-    "fileUrl": "/uploads/project.zip",
-    "filename": "project.zip"
+    "workerId": "worker-001",
+    "hostname": "desktop-pc",
+    "cpuCount": 8
   }'
 ```
 
-### Check Job Status
-
-```bash
-curl "http://localhost:3000/api/jobs/status?jobId=job-1705329400000-abc123" | jq
+**Response:**
+```json
+{
+  "success": true,
+  "token": "eyJhbGc..."
+}
 ```
 
-### List All Workers
+#### Submit Job
 
 ```bash
-curl http://localhost:3000/api/workers/register | jq '.workers[] | {workerId, status}'
+curl -X POST http://localhost:3000/api/jobs/submit \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "command": "npm test",
+    "fileUrl": "https://server/uploads/project.zip",
+    "workingDirectory": "project",
+    "timeout": 600
+  }'
 ```
+
+**Response:**
+```json
+{
+  "jobId": "job-12345",
+  "status": "queued",
+  "createdAt": "2026-01-25T10:30:00Z"
+}
+```
+
+#### Check Job Status
+
+```bash
+curl http://localhost:3000/api/jobs/status?jobId=job-12345
+```
+
+**Response:**
+```json
+{
+  "jobId": "job-12345",
+  "status": "running",
+  "workerId": "worker-001",
+  "stdout": "Running tests...\n",
+  "stderr": "",
+  "progress": 45
+}
+```
+
+#### Get Next Job (Worker)
+
+```bash
+curl -X GET http://localhost:3000/api/jobs/get-job \
+  -H "x-worker-token: <token>"
+```
+
+**Response:**
+```json
+{
+  "jobId": "job-12345",
+  "command": "npm test",
+  "fileUrl": "https://server/uploads/project.zip",
+  "timeout": 600
+}
+```
+
+---
+
+## API Reference
+
+### Worker Management
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/workers/register` | Register a new worker |
+| GET | `/api/workers/list` | List all workers |
+| GET | `/api/workers/[workerId]` | Get worker details |
+| DELETE | `/api/workers/[workerId]` | Unregister worker |
+| POST | `/api/workers/heartbeat` | Send heartbeat |
+
+### Job Management
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/jobs/submit` | Submit new job |
+| GET | `/api/jobs/status` | Get job status |
+| GET | `/api/jobs/list` | List jobs |
+| GET | `/api/jobs/get-job` | Get next job (worker) |
+| POST | `/api/jobs/submit-result` | Submit job result |
+| POST | `/api/jobs/stream-output` | Stream output |
+
+### File Management
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/files/upload` | Upload ZIP file |
+| GET | `/api/files/download/[fileId]` | Download file |
+
+### Authentication
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/auth/login` | User login |
+| POST | `/api/auth/logout` | User logout |
+| POST | `/api/auth/refresh` | Refresh token |
+
+---
+
+## Configuration
+
+### Environment Variables
+
+```env
+# Database
+MONGODB_URI=mongodb://user:pass@host:27017
+MONGODB_DB=cmd_executor
+
+# Redis (optional)
+REDIS_URL=redis://:password@localhost:6379/0
+
+# Security
+JWT_SECRET=secret-key-min-32-chars-long
+WORKER_TOKEN_SECRET=worker-secret-key
+JWT_EXPIRES_IN=24h
+
+# CORS & Origin
+ALLOWED_ORIGINS=http://localhost:3000,https://example.com
+ENFORCE_TLS=false
+
+# OIDC/OAuth (optional)
+OIDC_ISSUER=https://issuer.example.com
+OIDC_CLIENT_ID=client-id
+OIDC_CLIENT_SECRET=client-secret
+
+# Logging
+LOG_LEVEL=info
+DEBUG=cmd-executor:*
+```
+
+### Database Schema
+
+#### Workers Collection
+
+```javascript
+{
+  _id: ObjectId,
+  workerId: "worker-001",
+  hostname: "desktop-pc",
+  cpuCount: 8,
+  totalMemoryMb: 16384,
+  status: "online", // online, offline, error
+  lastHeartbeat: ISODate("2026-01-25T10:30:00Z"),
+  registeredAt: ISODate("2026-01-25T09:00:00Z"),
+  metadata: {
+    osType: "Windows",
+    nodeVersion: "18.17.0",
+    tags: ["test", "build"]
+  }
+}
+```
+
+#### Jobs Collection
+
+```javascript
+{
+  _id: ObjectId,
+  jobId: "job-12345",
+  command: "npm test",
+  fileUrl: "https://server/uploads/project.zip",
+  status: "completed", // queued, running, completed, failed
+  workerId: "worker-001",
+  createdAt: ISODate("2026-01-25T10:30:00Z"),
+  startedAt: ISODate("2026-01-25T10:30:05Z"),
+  completedAt: ISODate("2026-01-25T10:35:00Z"),
+  stdout: "test output...",
+  stderr: "",
+  exitCode: 0,
+  timeout: 600,
+  result: {
+    success: true,
+    duration: 295,
+    lines: 1250
+  }
+}
+```
+
+---
+
+## Deployment
+
+### Docker
+
+```bash
+# Build image
+docker build -t cmd-executor:latest .
+
+# Run server
+docker run -p 3000:3000 \
+  -e MONGODB_URI=mongodb://mongo:27017 \
+  -e REDIS_URL=redis://redis:6379 \
+  cmd-executor:latest
+
+# Run worker
+docker run \
+  -e SERVER_URL=http://server:3000 \
+  cmd-executor:latest node worker-agent.js
+```
+
+### Docker Compose
+
+```yaml
+version: '3.8'
+
+services:
+  server:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      MONGODB_URI: mongodb://mongo:27017
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - mongo
+      - redis
+
+  mongo:
+    image: mongo:latest
+    volumes:
+      - mongo-data:/data/db
+
+  redis:
+    image: redis:latest
+
+  worker-1:
+    build: .
+    command: node worker-agent.js --server http://server:3000
+    environment:
+      SERVER_URL: http://server:3000
+    depends_on:
+      - server
+
+volumes:
+  mongo-data:
+```
+
+---
 
 ## Troubleshooting
 
-| Issue                | Solution                                              |
-| -------------------- | ----------------------------------------------------- |
-| Worker won't connect | Check server is running: `curl http://localhost:3000` |
-| Jobs stay pending    | Ensure worker is running: `node worker-agent.js`      |
-| Results not showing  | Check job status: `curl /api/jobs/status?jobId=...`   |
-| File not found       | Verify file uploaded: `ls public/uploads/`            |
+### Worker Won't Register
 
-See [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md) for more troubleshooting.
+**Problem:** Worker keeps getting "Unauthorized" error
 
-## Performance
+**Solution:**
+1. Check server is running: `curl http://localhost:3000/api/health`
+2. Verify network connectivity: `ping server-hostname`
+3. Check logs: `node worker-agent.js --debug`
 
-| Operation           | Typical Time                   |
-| ------------------- | ------------------------------ |
-| Worker registration | < 1ms                          |
-| Job assignment      | < 2ms                          |
-| Status polling      | < 1ms                          |
-| File download       | 1-10s (depends on size)        |
-| Command execution   | Variable (depends on commands) |
+### Jobs Not Executing
 
-## Limitations (Phase 2)
+**Problem:** Jobs stay in "queued" status
 
-⚠️ **No database** - State lost on server restart (Phase 3 adds PostgreSQL)
-⚠️ **No authentication** - Anyone can submit jobs (Phase 3 adds auth)
-⚠️ **No encryption** - Files transfer unencrypted (Phase 3 adds HTTPS)
-⚠️ **No retry** - Failed jobs not automatically retried (Phase 3 adds retry logic)
-⚠️ **Single server** - No clustering (Phase 3 adds load balancing)
+**Solution:**
+1. Verify workers are registered: `curl http://localhost:3000/api/workers/list`
+2. Check worker logs for errors
+3. Ensure ZIP files are accessible
+4. Verify job timeout isn't too short
 
-## Phase 3 Roadmap
+### High Memory Usage
 
-- [x] Phase 1: Direct server execution ✅
-- [x] Phase 2: Distributed worker execution ✅
-- [ ] Phase 3: Enterprise features (planned)
-  - PostgreSQL backend
-  - JWT authentication
-  - TLS encryption
-  - Job retry mechanism
-  - Server clustering
-  - Web dashboard
-  - Docker support
-  - Kubernetes integration
+**Problem:** Worker process consuming too much RAM
 
-## Version History
+**Solution:**
+1. Reduce `--max-parallel` flag
+2. Increase job timeout to allow cleanup
+3. Monitor with `node --max-old-space-size=4096 worker-agent.js`
 
-- **v0.1.0** - Phase 1: Local execution
-- **v0.2.0** - Phase 2: Distributed workers (current) ← **You are here**
-- **v0.3.0** - Phase 3: Enterprise features (planned)
+### Output Not Streaming
 
-## Development
+**Problem:** Can't see real-time output
 
-### Run Tests
+**Solution:**
+1. Check WebSocket connectivity
+2. Verify ALLOWED_ORIGINS includes client URL
+3. Check browser console for errors
+4. Ensure job is actually running (check status endpoint)
 
-```bash
-npm run lint
+### Database Connection Failed
+
+**Problem:** "Failed to connect to MongoDB"
+
+**Solution:**
+1. Verify MongoDB is running: `mongo --version`
+2. Check connection string: `mongodb://localhost:27017`
+3. Verify authentication credentials
+4. Check firewall rules
+
+---
+
+## File Structure
+
+```
+cmd-executor/
+├── src/                      # Next.js application
+│   ├── app/                  # App router
+│   │   ├── api/             # API routes
+│   │   ├── components/      # React components
+│   │   └── page.tsx         # Main page
+│   ├── lib/                 # Utilities
+│   │   ├── db/             # Database setup
+│   │   ├── auth.ts         # Authentication
+│   │   └── types.ts        # TypeScript definitions
+│   └── middleware.ts        # Next.js middleware
+├── electron/               # Electron app (optional GUI)
+├── public/                 # Static files
+├── worker-agent.js         # Worker executable
+├── package.json            # Dependencies
+├── tsconfig.json           # TypeScript config
+├── next.config.ts          # Next.js config
+├── eslint.config.mjs       # Linting rules
+├── postcss.config.mjs      # CSS processing
+└── .env.local              # Environment variables
 ```
 
-### Build
+---
 
-```bash
-npm run build
-npm start
-```
+## Security Considerations
 
-### Format
+- **Authentication**: All API endpoints require JWT or HMAC tokens
+- **Rate Limiting**: Redis-based rate limiting on all endpoints
+- **CORS**: Configured for allowed origins only
+- **TLS/HTTPS**: Enforced in production (see `ENFORCE_TLS`)
+- **Token Rotation**: Implement regular token refresh
+- **File Uploads**: Validate ZIP files before processing
+- **Command Sanitization**: No shell injection prevention (run in isolated environment)
 
-```bash
-# No prettier configured, manually format
-```
+---
+
+## Performance Optimization
+
+- **Connection Pooling**: MongoDB connection reuse
+- **Redis Caching**: Job results cached for 1 hour
+- **Lazy Loading**: Components load on demand
+- **Compression**: gzip enabled for responses
+- **CDN**: Serve static files from CDN in production
+
+---
 
 ## Contributing
+
+1. Fork repository
+2. Create feature branch: `git checkout -b feature/name`
+3. Commit changes: `git commit -am 'Add feature'`
+4. Push to branch: `git push origin feature/name`
+5. Submit pull request
+
+---
+
+## License
+
+MIT - See LICENSE file for details
+
+---
+
+## Support
+
+- **Documentation**: See `/docs` folder
+- **Issues**: GitHub Issues
+- **Discussions**: GitHub Discussions
+- **Email**: support@example.com
+
+---
+
+## Changelog
+
+### Version 0.2.0 (Current)
+- Distributed worker support
+- Real-time output streaming
+- Job queue management
+- Worker health monitoring
+
+### Version 0.1.0
+- Initial release
+- Direct command execution
+- Basic web UI
 
 This is a custom distributed system. For improvements:
 

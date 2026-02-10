@@ -1,8 +1,17 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #071321;
+  --foreground: #e7edf6;
+  --surface-1: #0c1d33;
+  --surface-2: #0f2440;
+  --surface-3: #132a4a;
+  --border: #9aa8ba;
+  --muted: #a8b4c4;
+  --accent: #7fb6ff;
+  --accent-strong: #9fc7ff;
+  --silver: #c5cedb;
+  --shadow: rgba(3, 10, 20, 0.55);
 }
 
 @theme inline {
@@ -12,15 +21,271 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+body {
+  background:
+    radial-gradient(
+      900px 600px at 15% 10%,
+      rgba(20, 60, 120, 0.28),
+      transparent 60%
+    ),
+    radial-gradient(
+      800px 500px at 85% 5%,
+      rgba(18, 40, 90, 0.35),
+      transparent 55%
+    ),
+    linear-gradient(180deg, #06111f 0%, #0a1730 60%, #071321 100%);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans, "Trebuchet MS", "Segoe UI", sans-serif);
+  min-height: 100vh;
 }
 
-body {
-  background: var(--background);
+.app-shell {
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  min-height: 100vh;
+}
+
+.app-header {
+  background: linear-gradient(180deg, #0f2746 0%, #0b1d36 100%);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 10px 30px var(--shadow);
+}
+
+.app-tabbar {
+  background: #0b1c33;
+  border-bottom: 1px solid rgba(154, 168, 186, 0.6);
+}
+
+.app-tab {
+  border-right: 1px solid rgba(154, 168, 186, 0.4);
+}
+
+.app-tab-active {
+  background: #081a2e;
+  color: var(--accent-strong);
+  border-bottom: 2px solid var(--accent);
+}
+
+.app-tab-inactive {
+  background: #0f2341;
+  color: var(--muted);
+}
+
+.app-tab-inactive:hover {
+  background: #132a4a;
+  color: var(--silver);
+}
+
+.app-panel {
+  background: var(--surface-1);
+  border: 1px solid rgba(154, 168, 186, 0.55);
+  box-shadow: 0 18px 40px var(--shadow);
+  border-radius: 12px;
+}
+
+.app-panel-header {
+  background: var(--surface-2);
+  border-bottom: 1px solid rgba(154, 168, 186, 0.55);
+}
+
+.panel-title {
+  color: var(--accent-strong);
+  border-bottom: 1px solid rgba(154, 168, 186, 0.6);
+  padding-bottom: 0.5rem;
+}
+
+.text-accent {
+  color: var(--accent);
+}
+
+.text-accent-strong {
+  color: var(--accent-strong);
+}
+
+.text-secondary {
+  color: var(--muted);
+}
+
+.text-silver {
+  color: var(--silver);
+}
+
+.text-info {
+  color: #8ab8ff;
+}
+
+.text-warn {
+  color: #ffd27a;
+}
+
+.text-error {
+  color: #ff9a9a;
+}
+
+.input-surface {
+  background: #08172c;
+  color: var(--foreground);
+  border: 1px solid rgba(154, 168, 186, 0.6);
+  border-radius: 8px;
+}
+
+.input-surface:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(127, 182, 255, 0.4);
+  border-color: rgba(159, 199, 255, 0.9);
+}
+
+.file-input::file-selector-button {
+  background: linear-gradient(180deg, #a7c6ff 0%, #6c94df 100%);
+  color: #071321;
+  border: 1px solid rgba(197, 206, 219, 0.85);
+  border-radius: 8px;
+  padding: 0.25rem 0.75rem;
+  margin-right: 0.75rem;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.glaze-button {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, #9fc0f5 0%, #6a92db 100%);
+  color: #061425;
+  border: 1px solid rgba(197, 206, 219, 0.9);
+  border-radius: 10px;
+  box-shadow: 0 10px 22px rgba(4, 12, 24, 0.45);
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.2s ease,
+    filter 0.2s ease;
+}
+
+.glaze-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px rgba(4, 12, 24, 0.55);
+}
+
+.glaze-button:disabled {
+  filter: saturate(0.4);
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.glaze-button--neutral {
+  background: linear-gradient(135deg, #c7d0dd 0%, #97a5b8 100%);
+  color: #071321;
+}
+
+.glaze-button--warn {
+  background: linear-gradient(135deg, #ffd27a 0%, #d9a84f 100%);
+  color: #3a2505;
+}
+
+.glaze-button--danger {
+  background: linear-gradient(135deg, #ff9f9f 0%, #d87171 100%);
+  color: #3a0b0b;
+}
+
+.status {
+  border-radius: 12px;
+  border: 1px solid rgba(154, 168, 186, 0.6);
+  background: rgba(12, 24, 44, 0.7);
+  color: var(--silver);
+}
+
+.status-success {
+  border-color: rgba(143, 205, 170, 0.7);
+  background: rgba(31, 80, 64, 0.4);
+  color: #bde7d4;
+}
+
+.status-error {
+  border-color: rgba(255, 154, 154, 0.7);
+  background: rgba(80, 24, 36, 0.45);
+  color: #ffd1d1;
+}
+
+.status-warning {
+  border-color: rgba(255, 210, 122, 0.7);
+  background: rgba(88, 64, 18, 0.4);
+  color: #ffe3b0;
+}
+
+.status-info {
+  border-color: rgba(127, 182, 255, 0.7);
+  background: rgba(20, 44, 84, 0.5);
+  color: #c8dbff;
+}
+
+.worker-card {
+  background: #0f2341;
+  border: 1px solid rgba(154, 168, 186, 0.5);
+  border-radius: 10px;
+}
+
+.worker-card--offline {
+  background: #09172b;
+  opacity: 0.55;
+}
+
+.worker-card--idle {
+  border-color: rgba(127, 182, 255, 0.7);
+}
+
+.worker-card--busy {
+  border-color: rgba(255, 210, 122, 0.7);
+}
+
+.worker-card--unhealthy {
+  border-color: rgba(255, 154, 154, 0.7);
+}
+
+.status-chip {
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  border: 1px solid rgba(154, 168, 186, 0.6);
+  background: rgba(8, 22, 40, 0.6);
+  color: var(--silver);
+}
+
+.status-chip--idle {
+  border-color: rgba(127, 182, 255, 0.6);
+  color: #bcd3ff;
+}
+
+.status-chip--busy {
+  border-color: rgba(255, 210, 122, 0.6);
+  color: #ffe0a8;
+}
+
+.status-chip--unhealthy {
+  border-color: rgba(255, 154, 154, 0.6);
+  color: #ffd1d1;
+}
+
+.status-chip--offline {
+  border-color: rgba(154, 168, 186, 0.4);
+  color: var(--muted);
+}
+
+.auth-card {
+  background: rgba(10, 24, 46, 0.85);
+  border: 1px solid rgba(154, 168, 186, 0.6);
+  border-radius: 16px;
+  box-shadow: 0 25px 50px rgba(4, 12, 24, 0.65);
+  backdrop-filter: blur(8px);
+}
+
+.auth-tab {
+  border-bottom: 1px solid rgba(154, 168, 186, 0.35);
+  color: var(--muted);
+}
+
+.auth-tab-active {
+  border-bottom: 2px solid var(--accent);
+  color: var(--accent-strong);
+}
+
+.auth-tab-inactive:hover {
+  color: var(--silver);
 }

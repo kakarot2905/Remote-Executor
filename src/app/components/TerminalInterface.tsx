@@ -1,6 +1,17 @@
 "use client";
 
 import React, { useRef, useState, useEffect } from "react";
+import {
+  Upload,
+  Play,
+  Square,
+  Trash2,
+  RotateCcw,
+  AlertCircle,
+  CheckCircle,
+  Info,
+  AlertTriangle,
+} from "lucide-react";
 import AvailableNodes from "./AvailableNodes";
 import { clientAuth } from "@/lib/client-auth";
 
@@ -130,7 +141,7 @@ export default function TerminalInterface({
     }
 
     setIsExecuting(true);
-    setStatusMessage("⏳ Uploading file and executing commands...");
+    setStatusMessage("Uploading file and executing commands...");
     setStatusType("info");
     const abortController = new AbortController();
     abortRef.current = abortController;
@@ -313,9 +324,9 @@ export default function TerminalInterface({
           } else if (job.status === "COMPLETED") {
             // Guard: handle completion once
             finished = true;
-            setStatusMessage(`✓ Job completed with exit code: ${job.exitCode}`);
+            setStatusMessage(`Job completed with exit code: ${job.exitCode}`);
             setStatusType(job.exitCode === 0 ? "success" : "warning");
-            addLog("✓ Job completed!", "info");
+            addLog("Job completed!", "info");
 
             // Display any remaining output that wasn't shown during streaming
             if (job.stdout && job.stdout.length > lastStdoutLength) {
@@ -359,10 +370,10 @@ export default function TerminalInterface({
             // Guard: handle failure once
             finished = true;
             setStatusMessage(
-              `✗ Job failed: ${job.errorMessage || "Unknown error"}`,
+              `Job failed: ${job.errorMessage || "Unknown error"}`,
             );
             setStatusType("error");
-            addLog("✗ Job failed!", "error");
+            addLog("Job failed!", "error");
             addLog(job.errorMessage || "Unknown error", "error");
 
             if (job.stdout) {
@@ -409,7 +420,7 @@ export default function TerminalInterface({
   };
 
   const handleForceStop = async () => {
-    setStatusMessage("⏹ Force stop requested...");
+    setStatusMessage("Force stop requested...");
     setStatusType("warning");
     addLog("Force stop requested", "info");
 
@@ -486,78 +497,103 @@ export default function TerminalInterface({
     }
   };
 
+  const getStatusIcon = () => {
+    switch (statusType) {
+      case "success":
+        return <CheckCircle className="w-4 h-4" />;
+      case "error":
+        return <AlertCircle className="w-4 h-4" />;
+      case "warning":
+        return <AlertTriangle className="w-4 h-4" />;
+      default:
+        return <Info className="w-4 h-4" />;
+    }
+  };
+
+  const getStatusStyles = () => {
+    const baseStyles = "p-3 rounded-lg border flex items-center gap-3";
+    switch (statusType) {
+      case "success":
+        return `${baseStyles} bg-emerald-50 border-emerald-200 text-emerald-900`;
+      case "error":
+        return `${baseStyles} bg-red-50 border-red-200 text-red-900`;
+      case "warning":
+        return `${baseStyles} bg-amber-50 border-amber-200 text-amber-900`;
+      default:
+        return `${baseStyles} bg-blue-50 border-blue-200 text-blue-900`;
+    }
+  };
+
   return (
-    <div className="bg-black text-green-400 font-mono">
+    <div className="h-full flex flex-col max-h-screen bg-background">
       {/* Header - Only show if not in multi-node mode */}
       {!nodeId && (
-        <div className="bg-gray-900 border-b-2 border-green-400 p-4 sticky top-0 z-10">
-          <h1 className="text-xl font-bold">
-            CMD Executor - Remote Command Runner
-          </h1>
-          <p className="text-xs text-green-300 mt-1">
-            Upload a zip file containing your project and execute commands in
-            its root directory
+        <div className="border-b border-border px-6 py-4 bg-card">
+          <h1 className="text-2xl font-bold text-foreground">CMD Executor</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Upload a zip file and execute commands across distributed workers
           </p>
         </div>
       )}
 
-      <div className="flex gap-4 p-4 bg-gray-950 min-h-screen">
+      <div className="flex gap-4 p-4 flex-1 overflow-hidden ">
         {/* Left Sidebar - Available Nodes */}
-        <div className="w-80 flex flex-col max-h-[calc(100vh-120px)]">
+        <div className="w-80 flex flex-col flex-shrink-0">
           <AvailableNodes />
         </div>
 
         {/* Right Side - Control Panel + Terminal */}
-        <div className="flex-1 space-y-4 flex flex-col">
-          {/* Control Panel */}
-          <div className="grid grid-cols-3 gap-4 shrink-0">
+        <div className="flex-1 flex flex-col gap-4 min-w-0">
+          {/* Control Panel Grid */}
+          <div className="grid grid-cols-3 gap-3">
             {/* File Upload Section */}
-            <div className="border-2 border-green-400 p-4 bg-gray-900">
-              <h3 className="text-green-400 font-bold mb-3 border-b border-green-400 pb-2">
-                File Upload
-              </h3>
+            <div className="border border-border rounded-lg p-4 bg-card">
+              <div className="flex items-center gap-2 mb-3">
+                <Upload className="w-4 h-4 text-primary" />
+                <h3 className="font-semibold text-foreground">File</h3>
+              </div>
               <input
                 ref={fileInputRef}
                 type="file"
                 accept=".zip"
                 onChange={handleFileSelect}
                 disabled={isExecuting}
-                className="w-full bg-gray-800 text-green-400 border border-green-400 p-2 mb-2 cursor-pointer file:bg-green-400 file:text-black file:border-0 file:px-3 file:py-1 disabled:opacity-50"
+                className="w-full px-3 py-2 border border-border rounded bg-input text-sm disabled:opacity-50 cursor-pointer"
               />
               {selectedFile && (
-                <div className="text-xs text-green-300 bg-gray-800 p-2 rounded">
-                  <p>Selected: {selectedFile.name}</p>
-                  <p>Size: {(selectedFile.size / 1024).toFixed(2)} KB</p>
+                <div className="mt-2 p-2 bg-secondary/20 rounded text-xs text-foreground">
+                  <p className="font-medium truncate">{selectedFile.name}</p>
+                  <p className="text-muted-foreground">
+                    {(selectedFile.size / 1024).toFixed(2)} KB
+                  </p>
                 </div>
               )}
             </div>
 
             {/* Commands Section */}
-            <div className="border-2 border-green-400 p-4 bg-gray-900">
-              <h3 className="text-green-400 font-bold mb-3 border-b border-green-400 pb-2">
-                Commands
-              </h3>
+            <div className="border border-border rounded-lg p-4 bg-card">
+              <div className="flex items-center gap-2 mb-3">
+                <Play className="w-4 h-4 text-primary" />
+                <h3 className="font-semibold text-foreground">Commands</h3>
+              </div>
               <textarea
                 ref={inputRef}
                 value={commands}
                 onChange={(e) => setCommands(e.target.value)}
-                placeholder="Enter commands (one per line)&#10;Example:&#10;dir&#10;npm install"
+                placeholder="npm install&#10;npm run build"
                 disabled={isExecuting}
-                className="w-full bg-gray-800 text-green-400 border border-green-400 p-2 h-32 resize-none focus:outline-none focus:ring-2 focus:ring-green-400 disabled:opacity-50"
+                className="w-full px-3 py-2 border border-border rounded bg-input text-sm h-24 resize-none disabled:opacity-50 font-mono text-xs"
               />
-              <p className="text-xs text-green-300 mt-2">
-                Enter commands line by line. Each line will be executed in
-                order.
+              <p className="text-xs text-muted-foreground mt-2">
+                One command per line
               </p>
             </div>
 
             {/* Execution Mode Section */}
-            <div className="border-2 border-green-400 p-4 bg-gray-900">
-              <h3 className="text-green-400 font-bold mb-3 border-b border-green-400 pb-2">
-                Execution Mode
-              </h3>
+            <div className="border border-border rounded-lg p-4 bg-card">
+              <h3 className="font-semibold text-foreground mb-3">Mode</h3>
               <div className="space-y-2">
-                <label className="flex items-center cursor-pointer">
+                <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="radio"
                     name="mode"
@@ -569,17 +605,17 @@ export default function TerminalInterface({
                       )
                     }
                     disabled={isExecuting}
-                    className="mr-2"
+                    className="w-4 h-4"
                   />
-                  <span className="text-green-400 text-sm">
-                    🔄 Distributed (Worker Nodes)
+                  <span className="text-sm font-medium text-foreground">
+                    Distributed
                   </span>
                 </label>
-                <p className="text-xs text-green-300 ml-6">
-                  Runs on idle workers. Faster for server.
+                <p className="text-xs text-muted-foreground ml-6">
+                  Runs on idle workers
                 </p>
 
-                <label className="flex items-center cursor-pointer mt-3">
+                <label className="flex items-center gap-2 cursor-pointer mt-3">
                   <input
                     type="radio"
                     name="mode"
@@ -591,88 +627,71 @@ export default function TerminalInterface({
                       )
                     }
                     disabled={isExecuting}
-                    className="mr-2"
+                    className="w-4 h-4"
                   />
-                  <span className="text-green-400 text-sm">
-                    🖥️ Direct (Server)
+                  <span className="text-sm font-medium text-foreground">
+                    Direct
                   </span>
                 </label>
-                <p className="text-xs text-green-300 ml-6">
-                  Runs on this server. Legacy mode.
+                <p className="text-xs text-muted-foreground ml-6">
+                  Runs on this server
                 </p>
               </div>
             </div>
+          </div>
 
-            {/* Status Display */}
-            {statusMessage && (
-              <div
-                className={`col-span-3 p-3 rounded border-2 ${
-                  statusType === "success"
-                    ? "bg-green-900/30 border-green-400 text-green-300"
-                    : statusType === "error"
-                      ? "bg-red-900/30 border-red-400 text-red-300"
-                      : statusType === "warning"
-                        ? "bg-orange-900/30 border-orange-400 text-orange-300"
-                        : "bg-blue-900/30 border-blue-400 text-blue-300"
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold">Status:</span>
-                  <span className="text-sm">{statusMessage}</span>
-                </div>
-              </div>
-            )}
-
-            {/* Action Buttons */}
-            <div className="grid grid-cols-4 gap-2 shrink-0">
-              <button
-                onClick={handleExecute}
-                disabled={isExecuting || !selectedFile || !commands.trim()}
-                className="bg-green-400 text-black font-bold py-2 px-4 hover:bg-green-300 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
-              >
-                {isExecuting ? "⏳ Executing..." : "▶ Execute"}
-              </button>
-              <button
-                onClick={handleForceStop}
-                disabled={!isExecuting}
-                className={`font-bold py-2 px-4 transition-colors ${
-                  isExecuting
-                    ? "bg-orange-500 text-white hover:bg-orange-400 cursor-pointer"
-                    : "bg-gray-600 text-gray-400 cursor-not-allowed"
-                }`}
-              >
-                ⏹ Force Stop
-              </button>
-              <button
-                onClick={handleClear}
-                disabled={isExecuting}
-                className="bg-yellow-600 text-white font-bold py-2 px-4 hover:bg-yellow-500 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
-              >
-                🧹 Clear Logs
-              </button>
-              <button
-                onClick={handleReset}
-                disabled={isExecuting}
-                className="bg-red-700 text-white font-bold py-2 px-4 hover:bg-red-600 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
-              >
-                ↻ Reset
-              </button>
+          {/* Status Display */}
+          {statusMessage && (
+            <div className={getStatusStyles()}>
+              {getStatusIcon()}
+              <span className="text-sm flex-1">{statusMessage}</span>
             </div>
+          )}
+
+          {/* Action Buttons */}
+          <div className="flex gap-2">
+            <button
+              onClick={handleExecute}
+              disabled={isExecuting || !selectedFile || !commands.trim()}
+              className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm transition-colors"
+            >
+              <Play className="w-4 h-4" />
+              {isExecuting ? "Executing..." : "Execute"}
+            </button>
+            <button
+              onClick={handleForceStop}
+              disabled={!isExecuting}
+              className="flex items-center gap-2 px-4 py-2 bg-destructive/10 text-destructive rounded-lg hover:bg-destructive/20 disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm transition-colors"
+            >
+              <Square className="w-4 h-4" />
+              Stop
+            </button>
+            <button
+              onClick={handleClear}
+              disabled={isExecuting}
+              className="flex items-center gap-2 px-4 py-2 border border-border text-foreground rounded-lg hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm transition-colors"
+            >
+              <Trash2 className="w-4 h-4" />
+              Clear
+            </button>
+            <button
+              onClick={handleReset}
+              disabled={isExecuting}
+              className="flex items-center gap-2 px-4 py-2 border border-border text-foreground rounded-lg hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm transition-colors"
+            >
+              <RotateCcw className="w-4 h-4" />
+              Reset
+            </button>
           </div>
 
           {/* Terminal Content */}
-          <div className="flex-1 border-2 border-green-400 bg-gray-900 flex flex-col min-h-[500px]">
+          <div className="border border-border rounded-lg flex flex-col flex-1 min-h-0  bg-card overflow-hidden">
             {/* Terminal Header */}
-            <div className="bg-gray-800 border-b border-green-400 px-4 py-2 flex justify-between items-center">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-bold text-green-400">
-                  {nodeName || "CMD Executor"}
-                </span>
-                <span className="text-xs text-green-600">
-                  C:\Users\SysAdmin\Project&gt;
-                </span>
-              </div>
-              <span className="text-xs text-green-300">
+            <div className="border-b border-border px-4 py-3 flex justify-between items-center bg-secondary/30">
+              <span className="text-sm font-semibold text-foreground">
+                {nodeName || "Output"}
+              </span>
+              <span className="text-xs text-muted-foreground">
                 {logs.length} lines
               </span>
             </div>
@@ -680,30 +699,29 @@ export default function TerminalInterface({
             {/* Terminal Content */}
             <div
               ref={terminalRef}
-              className="flex-1 p-4 overflow-y-auto space-y-1 text-sm max-h-[calc(100vh-400px)]"
+              className="flex-1 p-4 overflow-y-auto space-y-1 text-sm font-mono max-h-full"
             >
               {logs.length === 0 ? (
-                <div className="text-green-600 ">
-                  <p>CMD Executor v1.0</p>
-                  <p>Ready for input...</p>
-                  <p className="mt-4 text-xs">
-                    1. Select a ZIP file with your project files
+                <div className="text-muted-foreground space-y-1 text-xs">
+                  <p>Ready for input</p>
+                  <p className="mt-4 text-muted-foreground/70">
+                    1. Select a ZIP file with your project
                   </p>
-                  <p className="text-xs">2. Enter commands to execute</p>
-                  <p className="text-xs">3. Click Execute to run commands</p>
+                  <p className="text-muted-foreground/70">2. Enter commands</p>
+                  <p className="text-muted-foreground/70">3. Click Execute</p>
                 </div>
               ) : (
                 logs.map((log) => (
                   <div
                     key={log.id}
-                    className={`whitespace-pre-wrap wrap-break-word ${
+                    className={`whitespace-pre-wrap break-words ${
                       log.type === "command"
-                        ? "text-yellow-400 font-bold"
+                        ? "text-amber-600 font-semibold"
                         : log.type === "error"
-                          ? "text-red-400"
+                          ? "text-red-600"
                           : log.type === "info"
-                            ? "text-cyan-400"
-                            : "text-green-400"
+                            ? "text-blue-600"
+                            : "text-emerald-600"
                     }`}
                   >
                     {log.content}

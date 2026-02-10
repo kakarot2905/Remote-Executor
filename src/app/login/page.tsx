@@ -56,21 +56,21 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-black text-cyan-400 font-mono flex items-center justify-center p-4">
+    <div className="min-h-screen app-shell font-mono flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Cyberpunk header */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold mb-2 text-cyan-400 glitch-text">
+          <h1 className="text-4xl font-bold mb-2 text-accent-strong glitch-text">
             CMD_EXECUTOR
           </h1>
-          <div className="text-sm text-cyan-600">
+          <div className="text-sm text-secondary">
             &gt;&gt; DISTRIBUTED COMMAND EXECUTION SYSTEM &lt;&lt;
           </div>
         </div>
 
         {/* Auth form */}
-        <div className="bg-gray-900 border-2 border-cyan-500 rounded-lg p-8 shadow-lg shadow-cyan-500/20">
-          <div className="flex mb-6 border-b border-cyan-800">
+        <div className="auth-card p-8">
+          <div className="flex mb-6">
             <button
               type="button"
               onClick={() => {
@@ -78,10 +78,8 @@ export default function LoginPage() {
                 setError("");
                 setConfirmPassword("");
               }}
-              className={`flex-1 pb-2 text-center transition-colors ${
-                isLogin
-                  ? "border-b-2 border-cyan-400 text-cyan-400"
-                  : "text-cyan-700 hover:text-cyan-500"
+              className={`auth-tab auth-tab-inactive flex-1 pb-2 text-center transition-colors ${
+                isLogin ? "auth-tab-active" : ""
               }`}
             >
               LOGIN
@@ -92,10 +90,8 @@ export default function LoginPage() {
                 setIsLogin(false);
                 setError("");
               }}
-              className={`flex-1 pb-2 text-center transition-colors ${
-                !isLogin
-                  ? "border-b-2 border-cyan-400 text-cyan-400"
-                  : "text-cyan-700 hover:text-cyan-500"
+              className={`auth-tab auth-tab-inactive flex-1 pb-2 text-center transition-colors ${
+                !isLogin ? "auth-tab-active" : ""
               }`}
             >
               REGISTER
@@ -104,34 +100,28 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="bg-red-900/30 border border-red-500 text-red-400 px-4 py-3 rounded">
-                {error}
-              </div>
+              <div className="status status-error px-4 py-3">{error}</div>
             )}
 
             <div>
-              <label className="block text-sm mb-2 text-cyan-400">
-                USERNAME
-              </label>
+              <label className="block text-sm mb-2 text-silver">USERNAME</label>
               <input
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full bg-black border-2 border-cyan-700 rounded px-4 py-2 text-cyan-400 focus:outline-none focus:border-cyan-400 transition-colors"
+                className="w-full input-surface px-4 py-2"
                 placeholder="Enter username"
                 disabled={loading}
               />
             </div>
 
             <div>
-              <label className="block text-sm mb-2 text-cyan-400">
-                PASSWORD
-              </label>
+              <label className="block text-sm mb-2 text-silver">PASSWORD</label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-black border-2 border-cyan-700 rounded px-4 py-2 text-cyan-400 focus:outline-none focus:border-cyan-400 transition-colors"
+                className="w-full input-surface px-4 py-2"
                 placeholder="Enter password"
                 disabled={loading}
               />
@@ -139,14 +129,14 @@ export default function LoginPage() {
 
             {!isLogin && (
               <div>
-                <label className="block text-sm mb-2 text-cyan-400">
+                <label className="block text-sm mb-2 text-silver">
                   CONFIRM PASSWORD
                 </label>
                 <input
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full bg-black border-2 border-cyan-700 rounded px-4 py-2 text-cyan-400 focus:outline-none focus:border-cyan-400 transition-colors"
+                  className="w-full input-surface px-4 py-2"
                   placeholder="Confirm password"
                   disabled={loading}
                 />
@@ -156,7 +146,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-cyan-600 hover:bg-cyan-500 text-black font-bold py-3 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full glaze-button py-3 font-semibold"
             >
               {loading ? "PROCESSING..." : isLogin ? "LOGIN" : "REGISTER"}
             </button>
@@ -164,7 +154,7 @@ export default function LoginPage() {
         </div>
 
         {/* System info */}
-        <div className="mt-6 text-center text-xs text-cyan-800">
+        <div className="mt-6 text-center text-xs text-secondary">
           <div>&gt; SECURE AUTHENTICATION REQUIRED</div>
           <div>&gt; ALL CONNECTIONS ENCRYPTED</div>
         </div>
@@ -174,28 +164,28 @@ export default function LoginPage() {
         @keyframes glitch {
           0% {
             text-shadow:
-              2px 2px #ff00de,
-              -2px -2px #00fff9;
+              2px 2px #9fc7ff,
+              -2px -2px #c5cedb;
           }
           25% {
             text-shadow:
-              -2px 2px #ff00de,
-              2px -2px #00fff9;
+              -2px 2px #9fc7ff,
+              2px -2px #c5cedb;
           }
           50% {
             text-shadow:
-              2px -2px #ff00de,
-              -2px 2px #00fff9;
+              2px -2px #9fc7ff,
+              -2px 2px #c5cedb;
           }
           75% {
             text-shadow:
-              -2px -2px #ff00de,
-              2px 2px #00fff9;
+              -2px -2px #9fc7ff,
+              2px 2px #c5cedb;
           }
           100% {
             text-shadow:
-              2px 2px #ff00de,
-              -2px -2px #00fff9;
+              2px 2px #9fc7ff,
+              -2px -2px #c5cedb;
           }
         }
         .glitch-text {

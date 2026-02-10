@@ -1,389 +1,189 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta
-      http-equiv="Content-Security-Policy"
-      content="default-src 'self'; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'"
-    />
-    <title>CMD Executor Worker Agent</title>
-    <link rel="stylesheet" href="styles.css" />
-    <script src="auth.js"></script>
-  </head>
-  <body>
-    <script>
-      // Check authentication after page loads
-      (function () {
-        authService.loadFromStorage();
-        if (!authService.isAuthenticated()) {
-          window.location.href = "login.html";
-        }
-      })();
-    </script>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CMD Executor - Distributed Command Execution</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
     <div class="container">
-      <!-- Animated Background -->
-      <div class="circuit-background">
-        <div class="circuit-line circuit-1"></div>
-        <div class="circuit-line circuit-2"></div>
-        <div class="circuit-line circuit-3"></div>
-      </div>
-
-      <!-- Header -->
-      <header class="header">
-        <div class="header-content">
-          <div class="logo-section">
-            <div class="logo-icon">⚡</div>
-            <div class="logo-text">
-              <h1 class="title">CMD EXECUTOR</h1>
-              <p class="subtitle">Distributed Command Execution System</p>
+        <!-- Header -->
+        <header class="header">
+            <div class="header-left">
+                <div class="logo">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M3 3h6v6H3V3m8 0h6v6h-6V3m8 0h2a2 2 0 012 2v4h-6V3h2M3 11h6v6H3v-6m8 0h6v6h-6v-6m8 0h2v6h-6v-6h4m-16 8h6v6H3v-6m8 0h6v6h-6v-6m8 0h2v6h-6v-6h4"/>
+                    </svg>
+                </div>
+                <div class="header-title">
+                    <h1>CMD Executor</h1>
+                    <p>Distributed command execution</p>
+                </div>
             </div>
-          </div>
-          <div class="header-stats">
-            <div class="stat-badge">
-              <span class="stat-label">v2.0.0</span>
-              <span class="stat-value">DOCKER</span>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <main class="main-content">
-        <!-- Worker Status Panel -->
-        <section class="panel status-panel">
-          <div class="panel-header">
-            <span class="panel-icon">⬤</span>
-            <h2 class="panel-title">WORKER STATUS</h2>
-            <div class="panel-glow"></div>
-          </div>
-          <div class="panel-body">
-            <div class="status-display">
-              <div class="status-indicator">
-                <div class="status-dot" id="statusDot"></div>
-                <div class="status-info">
-                  <span class="status-text" id="statusText">IDLE</span>
-                  <span class="status-subtext" id="pidInfo"></span>
+            <div class="header-right">
+                <div class="status-badge">
+                    <span class="status-dot inactive" id="statusDot"></span>
+                    <span id="statusText">Inactive</span>
                 </div>
-              </div>
-              <div class="status-metrics">
-                <div class="metric">
-                  <span class="metric-label">CPU</span>
-                  <span class="metric-value" id="cpuMetric">--</span>
-                </div>
-                <div class="metric">
-                  <span class="metric-label">MEM</span>
-                  <span class="metric-value" id="memMetric">--</span>
-                </div>
-                <div class="metric">
-                  <span class="metric-label">JOBS</span>
-                  <span class="metric-value" id="jobsMetric">--</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- Configuration Panel -->
-        <section class="panel config-panel">
-          <div class="panel-header">
-            <span class="panel-icon">⚙️</span>
-            <h2 class="panel-title">CONFIGURATION</h2>
-            <div class="panel-glow"></div>
-          </div>
-          <div class="panel-body">
-            <form id="configForm" class="form">
-              <!-- Connection Settings -->
-              <fieldset class="form-section">
-                <legend class="section-title">
-                  <span class="section-icon">🔗</span>
-                  CONNECTION SETTINGS
-                </legend>
-                <div class="form-group">
-                  <label for="serverUrl" class="form-label">
-                    Server URL
-                    <span class="tooltip-icon" title="Central server endpoint"
-                      >?</span
-                    >
-                  </label>
-                  <div class="input-wrapper">
-                    <span class="input-prefix">⚓</span>
-                    <input
-                      type="text"
-                      id="serverUrl"
-                      name="serverUrl"
-                      class="form-input"
-                      placeholder="http://localhost:3000"
-                      required
-                    />
-                    <span class="input-cursor"></span>
-                  </div>
-                </div>
-
-                <div class="form-row">
-                  <div class="form-group">
-                    <label for="workerId" class="form-label">
-                      Worker ID
-                      <span
-                        class="tooltip-icon"
-                        title="Unique worker identifier"
-                        >?</span
-                      >
-                    </label>
-                    <div class="input-wrapper">
-                      <span class="input-prefix">#</span>
-                      <input
-                        type="text"
-                        id="workerId"
-                        name="workerId"
-                        class="form-input"
-                        placeholder="Auto-generated"
-                      />
-                      <span class="input-cursor"></span>
-                    </div>
-                  </div>
-
-                  <div class="form-group">
-                    <label for="hostname" class="form-label">
-                      Hostname
-                      <span class="tooltip-icon" title="Custom hostname"
-                        >?</span
-                      >
-                    </label>
-                    <div class="input-wrapper">
-                      <span class="input-prefix">📍</span>
-                      <input
-                        type="text"
-                        id="hostname"
-                        name="hostname"
-                        class="form-input"
-                        placeholder="Auto-detected"
-                      />
-                      <span class="input-cursor"></span>
-                    </div>
-                  </div>
-                </div>
-              </fieldset>
-
-              <!-- Docker Configuration -->
-              <fieldset class="form-section">
-                <legend class="section-title">
-                  <span class="section-icon">🐳</span>
-                  DOCKER SETTINGS
-                </legend>
-                <div class="form-group checkbox-group">
-                  <label class="checkbox-label">
-                    <input
-                      type="checkbox"
-                      id="enableDocker"
-                      name="enableDocker"
-                      class="checkbox-input"
-                      checked
-                    />
-                    <span class="checkbox-visual"></span>
-                    <span class="checkbox-text">Enable Docker Isolation</span>
-                    <span
-                      class="tooltip-icon"
-                      title="Run in isolated containers"
-                      >?</span
-                    >
-                  </label>
-                </div>
-
-                <div class="form-row">
-                  <div class="form-group">
-                    <label for="dockerTimeout" class="form-label">
-                      Timeout (ms)
-                      <span class="tooltip-icon" title="Max execution time"
-                        >?</span
-                      >
-                    </label>
-                    <div class="input-wrapper">
-                      <span class="input-prefix">⏱️</span>
-                      <input
-                        type="number"
-                        id="dockerTimeout"
-                        name="dockerTimeout"
-                        class="form-input"
-                        value="300000"
-                        min="1000"
-                        step="1000"
-                      />
-                      <span class="input-cursor"></span>
-                    </div>
-                  </div>
-
-                  <div class="form-group">
-                    <label for="dockerMemoryLimit" class="form-label">
-                      Memory Limit
-                      <span class="tooltip-icon" title="e.g., 512m, 1g">?</span>
-                    </label>
-                    <div class="input-wrapper">
-                      <span class="input-prefix">💾</span>
-                      <input
-                        type="text"
-                        id="dockerMemoryLimit"
-                        name="dockerMemoryLimit"
-                        class="form-input"
-                        value="512m"
-                        placeholder="512m"
-                      />
-                      <span class="input-cursor"></span>
-                    </div>
-                  </div>
-
-                  <div class="form-group">
-                    <label for="dockerCpuLimit" class="form-label">
-                      CPU Limit
-                      <span class="tooltip-icon" title="e.g., 1.0, 2.0">?</span>
-                    </label>
-                    <div class="input-wrapper">
-                      <span class="input-prefix">⚡</span>
-                      <input
-                        type="text"
-                        id="dockerCpuLimit"
-                        name="dockerCpuLimit"
-                        class="form-input"
-                        value="2.0"
-                        placeholder="2.0"
-                      />
-                      <span class="input-cursor"></span>
-                    </div>
-                  </div>
-                </div>
-              </fieldset>
-
-              <!-- Performance Settings -->
-              <fieldset class="form-section">
-                <legend class="section-title">
-                  <span class="section-icon">🚀</span>
-                  PERFORMANCE
-                </legend>
-                <div class="form-group">
-                  <label for="maxParallelJobs" class="form-label">
-                    Max Parallel Jobs
-                    <span class="tooltip-icon" title="0 = auto based on CPU"
-                      >?</span
-                    >
-                  </label>
-                  <div class="input-wrapper">
-                    <span class="input-prefix">⚙️</span>
-                    <input
-                      type="number"
-                      id="maxParallelJobs"
-                      name="maxParallelJobs"
-                      class="form-input"
-                      value="0"
-                      min="0"
-                    />
-                    <span class="input-cursor"></span>
-                  </div>
-                  <small class="form-helper"
-                    >0 = Auto (based on CPU cores)</small
-                  >
-                </div>
-              </fieldset>
-
-              <!-- Config Actions -->
-              <div class="button-group">
-                <button
-                  type="button"
-                  id="saveConfigBtn"
-                  class="btn btn-secondary"
-                >
-                  <span class="btn-icon">💾</span>
-                  <span class="btn-text">Save Config</span>
+                <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+                    <svg class="sun-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="5"/>
+                        <line x1="12" y1="1" x2="12" y2="3"/>
+                        <line x1="12" y1="21" x2="12" y2="23"/>
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                        <line x1="1" y1="12" x2="3" y2="12"/>
+                        <line x1="21" y1="12" x2="23" y2="12"/>
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                    </svg>
+                    <svg class="moon-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                    </svg>
                 </button>
-                <button
-                  type="button"
-                  id="loadConfigBtn"
-                  class="btn btn-secondary"
-                >
-                  <span class="btn-icon">📂</span>
-                  <span class="btn-text">Load Config</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </section>
-
-        <!-- Control Panel -->
-        <section class="panel control-panel">
-          <div class="panel-header">
-            <span class="panel-icon">🎮</span>
-            <h2 class="panel-title">WORKER CONTROL</h2>
-            <div class="panel-glow"></div>
-          </div>
-          <div class="panel-body">
-            <div class="control-actions">
-              <button id="startBtn" class="btn btn-primary btn-large">
-                <span class="btn-icon">▶️</span>
-                <span class="btn-text">START WORKER</span>
-              </button>
-              <button id="stopBtn" class="btn btn-danger btn-large" disabled>
-                <span class="btn-icon">⏹️</span>
-                <span class="btn-text">STOP WORKER</span>
-              </button>
             </div>
-          </div>
-        </section>
+        </header>
 
-        <!-- Output Panel -->
-        <section class="panel output-panel">
-          <div class="panel-header">
-            <span class="panel-icon">📡</span>
-            <h2 class="panel-title">EXECUTION OUTPUT</h2>
-            <div class="panel-glow"></div>
-          </div>
-          <div class="panel-body">
-            <div class="output-toolbar">
-              <div class="output-info">
-                <span class="output-line-count" id="lineCount">0 lines</span>
-              </div>
-              <div class="output-actions">
-                <button
-                  id="clearOutputBtn"
-                  class="btn-icon-small"
-                  title="Clear output"
-                >
-                  🗑️
-                </button>
-                <button
-                  id="copyOutputBtn"
-                  class="btn-icon-small"
-                  title="Copy to clipboard"
-                >
-                  📋
-                </button>
-              </div>
-            </div>
-            <div id="outputContainer" class="output-container">
-              <div class="output-empty">
-                <span class="empty-icon">🔌</span>
-                <p>Waiting for output...</p>
-              </div>
-            </div>
-          </div>
-        </section>
-      </main>
+        <main class="main-content">
+            <!-- Cards Grid -->
+            <div class="cards-grid">
+                <!-- Worker Status Card -->
+                <div class="card">
+                    <div class="card-header">
+                        <svg class="card-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                            <line x1="2" y1="17" x2="22" y2="17"/>
+                            <line x1="6" y1="20" x2="6" y2="21"/>
+                            <line x1="12" y1="20" x2="12" y2="21"/>
+                            <line x1="18" y1="20" x2="18" y2="21"/>
+                        </svg>
+                        <h3>Worker Status</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="info-row">
+                            <span class="label">Worker ID:</span>
+                            <span class="value" id="workerIdDisplay">worker-001</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="label">Active Jobs:</span>
+                            <span class="value" id="activeJobsDisplay">0/4</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="label">Status:</span>
+                            <span class="value status-idle" id="workerStatusText">Idle</span>
+                        </div>
+                    </div>
+                </div>
 
-      <!-- Footer -->
-      <footer class="footer">
-        <div class="footer-content">
-          <p>
-            CMD Executor Worker Agent v2.0.0 | Docker-enabled Distributed
-            Execution System
-          </p>
-          <div class="footer-status">
-            <span class="status-light" id="footerStatus"></span>
-            <span id="footerStatusText">DISCONNECTED</span>
-          </div>
-        </div>
-      </footer>
+                <!-- Server Card -->
+                <div class="card">
+                    <div class="card-header">
+                        <svg class="card-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2m0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8m3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5m-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11m3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/>
+                        </svg>
+                        <h3>Server</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="info-row">
+                            <span class="label">URL:</span>
+                            <span class="value url">http://localhost:3000</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="label">Max Parallel:</span>
+                            <span class="value">4 jobs</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Controls Card -->
+                <div class="card">
+                    <div class="card-header">
+                        <svg class="card-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="1"/>
+                            <circle cx="19" cy="12" r="1"/>
+                            <circle cx="5" cy="12" r="1"/>
+                        </svg>
+                        <h3>Controls</h3>
+                    </div>
+                    <div class="card-body button-group">
+                        <button class="btn btn-primary" id="startBtn">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M8 5v14l11-7z"/>
+                            </svg>
+                            Start
+                        </button>
+                        <button class="btn btn-secondary" id="stopBtn">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <rect x="6" y="4" width="4" height="16"/>
+                                <rect x="14" y="4" width="4" height="16"/>
+                            </svg>
+                            Stop
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Configuration Card -->
+            <div class="card">
+                <div class="card-header">
+                    <svg class="card-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"/>
+                        <path d="M12 1v6m0 6v6M4.22 4.22l4.24 4.24m2.12 2.12l4.24 4.24M1 12h6m6 0h6M4.22 19.78l4.24-4.24m2.12-2.12l4.24-4.24"/>
+                    </svg>
+                    <h3>Configuration</h3>
+                </div>
+                <div class="config-grid">
+                    <div class="form-group">
+                        <label for="serverUrl">Server URL</label>
+                        <input type="text" id="serverUrl" value="http://localhost:3000" placeholder="http://localhost:3000">
+                    </div>
+                    <div class="form-group">
+                        <label for="workerId">Worker ID</label>
+                        <input type="text" id="workerId" value="worker-001" placeholder="worker-001">
+                    </div>
+                    <div class="form-group">
+                        <label for="maxJobs">Max Parallel Jobs</label>
+                        <input type="number" id="maxJobs" value="4" min="1" max="16">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Execution Output Card -->
+            <div class="card">
+                <div class="card-header">
+                    <svg class="card-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="4 17 10 11 4 5"/>
+                        <line x1="12" y1="19" x2="20" y2="19"/>
+                    </svg>
+                    <h3>Execution Output</h3>
+                    <span class="output-lines" id="lineCount">0 lines</span>
+                    <div class="output-actions">
+                        <button class="action-btn" id="copyOutputBtn" title="Copy output" aria-label="Copy output">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+                                <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+                            </svg>
+                        </button>
+                        <button class="action-btn" id="clearOutputBtn" title="Clear output" aria-label="Clear output">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="3 6 5 4 21 4"/>
+                                <path d="M19 4v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4"/>
+                                <line x1="8" y1="4" x2="8" y2="20"/>
+                                <line x1="12" y1="4" x2="12" y2="20"/>
+                                <line x1="16" y1="4" x2="16" y2="20"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="terminal" id="terminal">
+                    <div class="terminal-line">$ waiting for commands...</div>
+                </div>
+            </div>
+        </main>
     </div>
 
-    <!-- Notification Container -->
-    <div id="notificationContainer" class="notification-container"></div>
-
-    <script src="renderer.js"></script>
-  </body>
+    <script src="theme.js"></script>
+    <script src="setup-event-listeners.js"></script>
+</body>
 </html>

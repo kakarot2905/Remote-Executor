@@ -68,7 +68,7 @@ const WORK_DIR = join(homedir(), ".cmd-executor-worker");
 const DOCKER_TIMEOUT = parseInt(process.env.DOCKER_TIMEOUT || "300000", 10); // 5 minutes (for long-running tasks)
 const DOCKER_MEMORY_LIMIT = process.env.DOCKER_MEMORY_LIMIT || "512m"; // 512 MB
 const DOCKER_CPU_LIMIT = process.env.DOCKER_CPU_LIMIT || "2.0"; // 2 CPU cores
-const ENABLE_DOCKER = process.env.ENABLE_DOCKER !== "false"; // Enabled by default
+const ENABLE_DOCKER = true; // Enabled by default
 const MAX_PARALLEL_JOBS = parseInt(process.env.MAX_PARALLEL_JOBS || "0", 10); // 0 = auto based on CPU
 
 // ============================================================================

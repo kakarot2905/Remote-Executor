@@ -25,10 +25,12 @@ export default function Home() {
   // Show loading or nothing while checking auth
   if (isLoading || !isAuthenticated) {
     return (
-      <div className="min-h-screen bg-black text-cyan-400 flex items-center justify-center font-mono">
+      <div className="min-h-screen  app-shell flex items-center justify-center font-mono">
         <div className="text-center">
-          <div className="text-2xl mb-2">AUTHENTICATING...</div>
-          <div className="text-sm text-cyan-600">Please wait...</div>
+          <div className="text-2xl mb-2 text-accent-strong">
+            AUTHENTICATING...
+          </div>
+          <div className="text-sm text-secondary">Please wait...</div>
         </div>
       </div>
     );

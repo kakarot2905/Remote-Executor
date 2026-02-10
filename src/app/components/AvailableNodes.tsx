@@ -343,7 +343,6 @@ const WorkerCard = React.memo(
             </p>
           </div>
 
-
           <div className="bg-secondary/20 rounded p-2 flex flex-col items-center justify-center">
             <Cpu className="w-4 h-4 text-muted-foreground mb-1" />
             <p className="font-semibold text-foreground text-sm">

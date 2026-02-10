@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const { spawn, execSync } = require('child_process');
 
 let mainWindow;
@@ -10,6 +11,24 @@ let workerStats = {
     dockerMemoryMb: 0,
     lastUpdated: 0
 };
+
+function getWorkerAgentPath() {
+    if (app.isPackaged) {
+        const resourcePath = path.join(process.resourcesPath, 'worker-agent.js');
+        if (fs.existsSync(resourcePath)) {
+            return resourcePath;
+        }
+        return path.join(__dirname, 'worker-agent.js');
+    }
+    return path.join(__dirname, 'worker-agent.js');
+}
+
+function getWorkerCwd() {
+    if (app.isPackaged) {
+        return process.resourcesPath;
+    }
+    return path.join(__dirname, '..');
+}
 
 // Parse heartbeat data from worker stdout
 function parseWorkerHeartbeat(data) {
@@ -111,7 +130,7 @@ ipcMain.handle('start-worker', async (event, config) => {
             return;
         }
 
-        const workerPath = path.join(__dirname, '..', 'worker-agent.js');
+        const workerPath = getWorkerAgentPath();
         const args = ['--server', config.serverUrl];
 
         // Set environment variables
@@ -129,7 +148,7 @@ ipcMain.handle('start-worker', async (event, config) => {
         try {
             workerProcess = spawn('node', [workerPath, ...args], {
                 env,
-                cwd: path.join(__dirname, '..'),
+                cwd: getWorkerCwd(),
             });
 
             let startupOutput = '';

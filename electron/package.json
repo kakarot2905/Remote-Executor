@@ -22,8 +22,17 @@
       "output": "../dist-electron"
     },
     "files": [
-      "**/*",
-      "../worker-agent.js"
+      "**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../worker-agent.js",
+        "to": "worker-agent.js"
+      },
+      {
+        "from": "../node_modules",
+        "to": "node_modules"
+      }
     ],
     "win": {
       "target": "nsis",

@@ -71,6 +71,8 @@ export const coerceJob = (raw: any): JobRecord => {
     stdout: raw.stdout ?? "",
     stderr: raw.stderr ?? "",
     exitCode: raw.exitCode ?? null,
+    resultFileId: raw.resultFileId ?? null,
+    resultFilename: raw.resultFilename ?? null,
 
     // Timestamps with defaults
     createdAt: raw.createdAt ?? Date.now(),

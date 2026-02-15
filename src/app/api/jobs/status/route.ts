@@ -25,6 +25,11 @@ export async function GET(request: NextRequest) {
       stderr: job.stderr,
       exitCode: job.exitCode,
       errorMessage: job.errorMessage,
+      resultFileId: job.resultFileId || null,
+      resultFilename: job.resultFilename || null,
+      resultFileUrl: job.resultFileId
+        ? `/api/files/download/${job.resultFileId}`
+        : null,
       createdAt: job.createdAt,
       queuedAt: job.queuedAt,
       assignedAt: job.assignedAt,

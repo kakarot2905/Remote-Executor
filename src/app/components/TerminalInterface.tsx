@@ -121,6 +121,34 @@ export default function TerminalInterface({
     ]);
   };
 
+  const downloadResultZip = async (url: string, filename?: string | null) => {
+    try {
+      const response = await fetch(url, {
+        headers: clientAuth.getAuthHeaders(),
+      });
+      if (!response.ok) {
+        throw new Error("Failed to download result zip");
+      }
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = filename || "job-results.zip";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (error) {
+      addLog(
+        `Error downloading result zip: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        "error",
+      );
+    }
+  };
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -264,6 +292,7 @@ export default function TerminalInterface({
       let hasShownRunningMessage = false;
       let isCancelled = false; // Track if job was cancelled
       let finished = false; // Ensure terminal state handled once
+      let promptedDownload = false;
 
       const pollAbortController = new AbortController();
 
@@ -344,6 +373,25 @@ export default function TerminalInterface({
             }
 
             addLog(`Exit code: ${job.exitCode}`, "info");
+
+            const resultUrl =
+              job.resultFileUrl ||
+              (job.resultFileId
+                ? `/api/files/download/${job.resultFileId}`
+                : null);
+            if (resultUrl && !promptedDownload) {
+              promptedDownload = true;
+              const filename =
+                job.resultFilename || `${job.jobId}-results.zip`;
+              setTimeout(() => {
+                const shouldDownload = window.confirm(
+                  "Job completed. Download result zip (logs + output files)?",
+                );
+                if (shouldDownload) {
+                  void downloadResultZip(resultUrl, filename);
+                }
+              }, 0);
+            }
 
             if (pollIntervalRef.current) {
               clearInterval(pollIntervalRef.current);

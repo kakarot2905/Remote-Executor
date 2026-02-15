@@ -165,6 +165,12 @@ export interface JobRecord {
   /** Error message if job failed (populated on failure) */
   errorMessage: string | null;
 
+  /** GridFS fileId for result zip (logs + output files) */
+  resultFileId?: string | null;
+
+  /** Filename of result zip (for download) */
+  resultFilename?: string | null;
+
   // ────────────────────────────────────────────────────────────────────────
   // LIFECYCLE TIMESTAMPS (for performance tracking)
   // ────────────────────────────────────────────────────────────────────────

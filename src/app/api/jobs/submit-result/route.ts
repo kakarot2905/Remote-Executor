@@ -6,11 +6,20 @@ import {
   releaseJobResources,
   scheduleJobs,
 } from "@/lib/scheduler";
+import { uploadFile } from "@/lib/gridfs";
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { jobId, workerId, stdout, stderr, exitCode } = body;
+    const {
+      jobId,
+      workerId,
+      stdout,
+      stderr,
+      exitCode,
+      resultZipBase64,
+      resultZipName,
+    } = body;
 
     if (!jobId || !workerId) {
       return NextResponse.json(
@@ -32,6 +41,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Upload result zip if provided
+    let resultFileId: string | null = null;
+    let resultFilename: string | null = null;
+    if (resultZipBase64) {
+      const zipBuffer = Buffer.from(resultZipBase64, "base64");
+      const uploadResult = await uploadFile(
+        zipBuffer,
+        resultZipName || `job-${jobId}-results.zip`,
+        "application/zip",
+        {
+          jobId,
+          type: "job-result",
+          uploadedAt: new Date(),
+        },
+      );
+      resultFileId = uploadResult.fileId;
+      resultFilename = uploadResult.filename;
+    }
+
     // Update job with results
     const now = Date.now();
     await updateJobStatus(jobId, "COMPLETED", {
@@ -40,6 +68,8 @@ export async function POST(request: NextRequest) {
       exitCode: exitCode !== undefined ? exitCode : null,
       completedAt: now,
       errorMessage: null,
+      resultFileId: resultFileId ?? undefined,
+      resultFilename: resultFilename ?? undefined,
     });
 
     // Release worker resources and mark idle if nothing else is queued

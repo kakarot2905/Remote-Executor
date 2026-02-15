@@ -306,6 +306,8 @@ async function handleDistributedExecution(
       stdout: "",
       stderr: "",
       exitCode: null,
+      resultFileId: null,
+      resultFilename: null,
       createdAt: now,
       queuedAt: now,
       assignedAt: null,

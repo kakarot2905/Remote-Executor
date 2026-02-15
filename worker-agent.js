@@ -1016,6 +1016,24 @@ class WorkerAgent {
                 }
             }
 
+            let resultZipBase64 = null;
+            let resultZipName = null;
+            try {
+                resultZipName = `${job.jobId}-results.zip`;
+                const resultZipPath = join(jobDir, resultZipName);
+                const resultZip = new AdmZip();
+                resultZip.addLocalFolder(extractDir);
+
+                const logsContent = `STDOUT\n${stdout}\n\nSTDERR\n${stderr}\n`;
+                resultZip.addFile("logs.txt", Buffer.from(logsContent, "utf8"));
+                resultZip.writeZip(resultZipPath);
+
+                const resultBuffer = await fs.readFile(resultZipPath);
+                resultZipBase64 = resultBuffer.toString("base64");
+            } catch (e) {
+                log(`Failed to build result zip: ${e.message}`, "WARN");
+            }
+
             // Submit results
             log(`Submitting results to server...`, "INFO");
             const submitResponse = await httpRequest(
@@ -1027,6 +1045,8 @@ class WorkerAgent {
                     stdout,
                     stderr,
                     exitCode,
+                    resultZipBase64,
+                    resultZipName,
                 }
             );
 

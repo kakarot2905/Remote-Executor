@@ -68,7 +68,9 @@ const WORK_DIR = join(homedir(), ".cmd-executor-worker");
 const DOCKER_TIMEOUT = parseInt(process.env.DOCKER_TIMEOUT || "300000", 10); // 5 minutes (for long-running tasks)
 const DOCKER_MEMORY_LIMIT = process.env.DOCKER_MEMORY_LIMIT || "512m"; // 512 MB
 const DOCKER_CPU_LIMIT = process.env.DOCKER_CPU_LIMIT || "2.0"; // 2 CPU cores
-const ENABLE_DOCKER = true; // Enabled by default
+const ENABLE_DOCKER = (process.env.ENABLE_DOCKER || "true") !== "false";
+const DOCKER_NETWORK_MODE = process.env.DOCKER_NETWORK_MODE || "none";
+const DOCKER_TMPFS_MB = parseInt(process.env.DOCKER_TMPFS_MB || "1024", 10);
 const MAX_PARALLEL_JOBS = parseInt(process.env.MAX_PARALLEL_JOBS || "0", 10); // 0 = auto based on CPU
 
 // ============================================================================
@@ -79,10 +81,16 @@ const MAX_PARALLEL_JOBS = parseInt(process.env.MAX_PARALLEL_JOBS || "0", 10); //
  * Execute commands inside isolated Docker containers with full sandboxing
  */
 class DockerExecutor {
-    constructor(timeout = DOCKER_TIMEOUT, memoryLimit = DOCKER_MEMORY_LIMIT, cpuLimit = DOCKER_CPU_LIMIT) {
+    constructor(
+        timeout = DOCKER_TIMEOUT,
+        memoryLimit = DOCKER_MEMORY_LIMIT,
+        cpuLimit = DOCKER_CPU_LIMIT,
+        networkMode = DOCKER_NETWORK_MODE
+    ) {
         this.timeout = timeout;
         this.memoryLimit = memoryLimit;
         this.cpuLimit = cpuLimit;
+        this.networkMode = networkMode;
     }
 
     /**
@@ -110,7 +118,7 @@ class DockerExecutor {
             "--cap-drop=ALL", // Drop ALL Linux capabilities
             "--security-opt=no-new-privileges:true", // No privilege escalation
             // ===== NETWORK ISOLATION =====
-            "--network=none", // No networking
+            `--network=${this.networkMode}`,
             // ===== RESOURCE LIMITS =====
             `--memory=${this.memoryLimit}`,
             `--cpus=${this.cpuLimit}`,
@@ -118,9 +126,14 @@ class DockerExecutor {
             "--pids-limit=32", // Max 32 processes
             // ===== WORKSPACE MOUNT =====
             "-v", `${workspaceDir}:/workspace:rw`,
+            // ===== WRITABLE PATHS FOR TOOLING =====
+            "-e", "HOME=/workspace",
+            "-e", "TMPDIR=/workspace/.tmp",
+            "-e", "PIP_CACHE_DIR=/workspace/.pip-cache",
+            "-e", "PIP_TARGET=/workspace/.pip-packages",
             // ===== TEMP DIRECTORIES (tmpfs) =====
             "--tmpfs=/run:size=10m",
-            "--tmpfs=/tmp:size=50m",
+            `--tmpfs=/tmp:size=${Math.max(DOCKER_TMPFS_MB, 64)}m`,
             // ===== WORKING DIRECTORY =====
             "-w", `/workspace`,
             // ===== IMAGE & COMMAND =====
@@ -1104,7 +1117,12 @@ class WorkerAgent {
      * - Hard timeout enforcement
      */
     async executeCommandDocker(command, cwd, onDataCallback, jobId, timeoutMs) {
-        const dockerExecutor = new DockerExecutor(timeoutMs || DOCKER_TIMEOUT, DOCKER_MEMORY_LIMIT, DOCKER_CPU_LIMIT);
+        const dockerExecutor = new DockerExecutor(
+            timeoutMs || DOCKER_TIMEOUT,
+            DOCKER_MEMORY_LIMIT,
+            DOCKER_CPU_LIMIT,
+            DOCKER_NETWORK_MODE
+        );
 
         try {
             const result = await dockerExecutor.execute(command, cwd, onDataCallback, jobId, this.serverUrl);

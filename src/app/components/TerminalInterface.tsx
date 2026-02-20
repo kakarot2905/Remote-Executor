@@ -381,8 +381,7 @@ export default function TerminalInterface({
                 : null);
             if (resultUrl && !promptedDownload) {
               promptedDownload = true;
-              const filename =
-                job.resultFilename || `${job.jobId}-results.zip`;
+              const filename = job.resultFilename || `${job.jobId}-results.zip`;
               setTimeout(() => {
                 const shouldDownload = window.confirm(
                   "Job completed. Download result zip (logs + output files)?",

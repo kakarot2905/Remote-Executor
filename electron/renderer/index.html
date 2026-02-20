@@ -1,189 +1,420 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CMD Executor - Distributed Command Execution</title>
-    <link rel="stylesheet" href="styles.css">
-</head>
-<body>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
     <div class="container">
-        <!-- Header -->
-        <header class="header">
-            <div class="header-left">
-                <div class="logo">
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M3 3h6v6H3V3m8 0h6v6h-6V3m8 0h2a2 2 0 012 2v4h-6V3h2M3 11h6v6H3v-6m8 0h6v6h-6v-6m8 0h2v6h-6v-6h4m-16 8h6v6H3v-6m8 0h6v6h-6v-6m8 0h2v6h-6v-6h4"/>
-                    </svg>
-                </div>
-                <div class="header-title">
-                    <h1>CMD Executor</h1>
-                    <p>Distributed command execution</p>
-                </div>
-            </div>
-            <div class="header-right">
-                <div class="status-badge">
-                    <span class="status-dot inactive" id="statusDot"></span>
-                    <span id="statusText">Inactive</span>
-                </div>
-                <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
-                    <svg class="sun-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="5"/>
-                        <line x1="12" y1="1" x2="12" y2="3"/>
-                        <line x1="12" y1="21" x2="12" y2="23"/>
-                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
-                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-                        <line x1="1" y1="12" x2="3" y2="12"/>
-                        <line x1="21" y1="12" x2="23" y2="12"/>
-                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
-                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-                    </svg>
-                    <svg class="moon-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-                    </svg>
-                </button>
-            </div>
-        </header>
+      <!-- Header -->
+      <header class="header">
+        <div class="header-left">
+          <div class="logo">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+              <path
+                d="M3 3h6v6H3V3m8 0h6v6h-6V3m8 0h2a2 2 0 012 2v4h-6V3h2M3 11h6v6H3v-6m8 0h6v6h-6v-6m8 0h2v6h-6v-6h4m-16 8h6v6H3v-6m8 0h6v6h-6v-6m8 0h2v6h-6v-6h4"
+              />
+            </svg>
+          </div>
+          <div class="header-title">
+            <h1>CMD Executor</h1>
+            <p>Distributed command execution</p>
+          </div>
+        </div>
+        <div class="header-right">
+          <div class="status-badge">
+            <span class="status-dot inactive" id="statusDot"></span>
+            <span id="statusText">Inactive</span>
+          </div>
+          <button
+            class="theme-toggle"
+            id="themeToggle"
+            aria-label="Toggle theme"
+          >
+            <svg
+              class="sun-icon"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <circle cx="12" cy="12" r="5" />
+              <line x1="12" y1="1" x2="12" y2="3" />
+              <line x1="12" y1="21" x2="12" y2="23" />
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+              <line x1="1" y1="12" x2="3" y2="12" />
+              <line x1="21" y1="12" x2="23" y2="12" />
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+            </svg>
+            <svg
+              class="moon-icon"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+            >
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+            </svg>
+          </button>
+        </div>
+      </header>
 
-        <main class="main-content">
-            <!-- Cards Grid -->
-            <div class="cards-grid">
-                <!-- Worker Status Card -->
-                <div class="card">
-                    <div class="card-header">
-                        <svg class="card-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
-                            <line x1="2" y1="17" x2="22" y2="17"/>
-                            <line x1="6" y1="20" x2="6" y2="21"/>
-                            <line x1="12" y1="20" x2="12" y2="21"/>
-                            <line x1="18" y1="20" x2="18" y2="21"/>
-                        </svg>
-                        <h3>Worker Status</h3>
-                    </div>
-                    <div class="card-body">
-                        <div class="info-row">
-                            <span class="label">Worker ID:</span>
-                            <span class="value" id="workerIdDisplay">worker-001</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="label">Active Jobs:</span>
-                            <span class="value" id="activeJobsDisplay">0/4</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="label">Status:</span>
-                            <span class="value status-idle" id="workerStatusText">Idle</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Server Card -->
-                <div class="card">
-                    <div class="card-header">
-                        <svg class="card-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2m0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8m3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5m-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11m3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/>
-                        </svg>
-                        <h3>Server</h3>
-                    </div>
-                    <div class="card-body">
-                        <div class="info-row">
-                            <span class="label">URL:</span>
-                            <span class="value url">http://localhost:3000</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="label">Max Parallel:</span>
-                            <span class="value">4 jobs</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Controls Card -->
-                <div class="card">
-                    <div class="card-header">
-                        <svg class="card-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="12" r="1"/>
-                            <circle cx="19" cy="12" r="1"/>
-                            <circle cx="5" cy="12" r="1"/>
-                        </svg>
-                        <h3>Controls</h3>
-                    </div>
-                    <div class="card-body button-group">
-                        <button class="btn btn-primary" id="startBtn">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M8 5v14l11-7z"/>
-                            </svg>
-                            Start
-                        </button>
-                        <button class="btn btn-secondary" id="stopBtn">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                <rect x="6" y="4" width="4" height="16"/>
-                                <rect x="14" y="4" width="4" height="16"/>
-                            </svg>
-                            Stop
-                        </button>
-                    </div>
-                </div>
+      <main class="main-content">
+        <!-- Cards Grid -->
+        <div class="cards-grid">
+          <!-- Worker Status Card -->
+          <div class="card">
+            <div class="card-header">
+              <svg
+                class="card-icon"
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                <line x1="2" y1="17" x2="22" y2="17" />
+                <line x1="6" y1="20" x2="6" y2="21" />
+                <line x1="12" y1="20" x2="12" y2="21" />
+                <line x1="18" y1="20" x2="18" y2="21" />
+              </svg>
+              <h3>Worker Status</h3>
             </div>
-
-            <!-- Configuration Card -->
-            <div class="card">
-                <div class="card-header">
-                    <svg class="card-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="3"/>
-                        <path d="M12 1v6m0 6v6M4.22 4.22l4.24 4.24m2.12 2.12l4.24 4.24M1 12h6m6 0h6M4.22 19.78l4.24-4.24m2.12-2.12l4.24-4.24"/>
-                    </svg>
-                    <h3>Configuration</h3>
-                </div>
-                <div class="config-grid">
-                    <div class="form-group">
-                        <label for="serverUrl">Server URL</label>
-                        <input type="text" id="serverUrl" value="http://localhost:3000" placeholder="http://localhost:3000">
-                    </div>
-                    <div class="form-group">
-                        <label for="workerId">Worker ID</label>
-                        <input type="text" id="workerId" value="worker-001" placeholder="worker-001">
-                    </div>
-                    <div class="form-group">
-                        <label for="maxJobs">Max Parallel Jobs</label>
-                        <input type="number" id="maxJobs" value="4" min="1" max="16">
-                    </div>
-                </div>
+            <div class="card-body">
+              <div class="info-row">
+                <span class="label">Worker ID:</span>
+                <span class="value" id="workerIdDisplay">worker-001</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Active Jobs:</span>
+                <span class="value" id="activeJobsDisplay">0/4</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Status:</span>
+                <span class="value status-idle" id="workerStatusText"
+                  >Idle</span
+                >
+              </div>
             </div>
+          </div>
 
-            <!-- Execution Output Card -->
-            <div class="card">
-                <div class="card-header">
-                    <svg class="card-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="4 17 10 11 4 5"/>
-                        <line x1="12" y1="19" x2="20" y2="19"/>
-                    </svg>
-                    <h3>Execution Output</h3>
-                    <span class="output-lines" id="lineCount">0 lines</span>
-                    <div class="output-actions">
-                        <button class="action-btn" id="copyOutputBtn" title="Copy output" aria-label="Copy output">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
-                                <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
-                            </svg>
-                        </button>
-                        <button class="action-btn" id="clearOutputBtn" title="Clear output" aria-label="Clear output">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <polyline points="3 6 5 4 21 4"/>
-                                <path d="M19 4v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4"/>
-                                <line x1="8" y1="4" x2="8" y2="20"/>
-                                <line x1="12" y1="4" x2="12" y2="20"/>
-                                <line x1="16" y1="4" x2="16" y2="20"/>
-                            </svg>
-                        </button>
-                    </div>
-                </div>
-                <div class="terminal" id="terminal">
-                    <div class="terminal-line">$ waiting for commands...</div>
-                </div>
+          <!-- Server Card -->
+          <div class="card">
+            <div class="card-header">
+              <svg
+                class="card-icon"
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2m0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8m3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5m-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11m3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"
+                />
+              </svg>
+              <h3>Server</h3>
             </div>
-        </main>
+            <div class="card-body">
+              <div class="info-row">
+                <span class="label">URL:</span>
+                <span class="value url">http://localhost:3000</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Max Parallel:</span>
+                <span class="value">4 jobs</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Controls Card -->
+          <div class="card">
+            <div class="card-header">
+              <svg
+                class="card-icon"
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <circle cx="12" cy="12" r="1" />
+                <circle cx="19" cy="12" r="1" />
+                <circle cx="5" cy="12" r="1" />
+              </svg>
+              <h3>Controls</h3>
+            </div>
+            <div class="card-body button-group">
+              <button class="btn btn-primary" id="startBtn">
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                >
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+                Start
+              </button>
+              <button class="btn btn-secondary" id="stopBtn">
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                >
+                  <rect x="6" y="4" width="4" height="16" />
+                  <rect x="14" y="4" width="4" height="16" />
+                </svg>
+                Stop
+              </button>
+            </div>
+          </div>
+
+          <!-- Resource Usage Card -->
+          <div class="card">
+            <div class="card-header">
+              <svg
+                class="card-icon"
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M3 3v18h18"/>
+                <path d="M18.7 8a4 4 0 0 0-7.4 0"/>
+              </svg>
+              <h3>Resource Usage</h3>
+            </div>
+            <div class="card-body">
+              <div class="info-row">
+                <span class="label">CPU Usage:</span>
+                <span class="value" id="cpuUsageDisplay">0%</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Memory Usage:</span>
+                <span class="value" id="memUsageDisplay">0 MB</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Containers:</span>
+                <span class="value" id="containerCountDisplay">0</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Configuration Card -->
+        <div class="card">
+          <div class="card-header">
+            <svg
+              class="card-icon"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <circle cx="12" cy="12" r="3" />
+              <path
+                d="M12 1v6m0 6v6M4.22 4.22l4.24 4.24m2.12 2.12l4.24 4.24M1 12h6m6 0h6M4.22 19.78l4.24-4.24m2.12-2.12l4.24-4.24"
+              />
+            </svg>
+            <h3>Configuration</h3>
+          </div>
+          <div class="config-grid">
+            <div class="form-group">
+              <label for="serverUrl">Server URL</label>
+              <input
+                type="text"
+                id="serverUrl"
+                value="http://localhost:3000"
+                placeholder="http://localhost:3000"
+              />
+            </div>
+            <div class="form-group">
+              <label for="workerId">Worker ID</label>
+              <input
+                type="text"
+                id="workerId"
+                value="worker-001"
+                placeholder="worker-001"
+              />
+            </div>
+            <div class="form-group">
+              <label for="hostname">Hostname</label>
+              <input
+                type="text"
+                id="hostname"
+                value=""
+                placeholder="optional-hostname"
+              />
+            </div>
+            <div class="form-group">
+              <label for="maxParallelJobs">Max Parallel Jobs</label>
+              <input
+                type="number"
+                id="maxParallelJobs"
+                value="4"
+                min="1"
+                max="64"
+              />
+            </div>
+            <div class="form-group">
+              <label for="enableDocker">Enable Docker</label>
+              <div class="checkbox-row">
+                <input type="checkbox" id="enableDocker" checked />
+                <span class="checkbox-label">Run jobs in containers</span>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="dockerNetworkMode">Docker Network Mode</label>
+              <select id="dockerNetworkMode">
+                <option value="none" selected>None (isolated)</option>
+                <option value="bridge">Bridge</option>
+                <option value="host">Host</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="dockerTimeout">Docker Timeout (ms)</label>
+              <input
+                type="number"
+                id="dockerTimeout"
+                value="300000000"
+                min="1000"
+                step="1000"
+              />
+            </div>
+            <div class="form-group">
+              <label for="dockerMemoryLimit">Docker Memory Limit</label>
+              <input
+                type="text"
+                id="dockerMemoryLimit"
+                value="512m"
+                placeholder="512m"
+              />
+            </div>
+            <div class="form-group">
+              <label for="dockerCpuLimit">Docker CPU Limit</label>
+              <input
+                type="text"
+                id="dockerCpuLimit"
+                value="2.0"
+                placeholder="2.0"
+              />
+            </div>
+            <div class="form-group">
+              <label for="dockerTmpfsMb">Docker /tmp tmpfs (MB)</label>
+              <input
+                type="number"
+                id="dockerTmpfsMb"
+                value="1024"
+                min="64"
+                step="64"
+              />
+            </div>
+            <div class="form-group">
+              <label for="workerTokenSecret">Worker Token Secret</label>
+              <input
+                type="password"
+                id="workerTokenSecret"
+                value=""
+                placeholder="optional"
+              />
+            </div>
+            <div class="form-group">
+              <label for="vercelBypassToken">Vercel Bypass Token</label>
+              <input
+                type="password"
+                id="vercelBypassToken"
+                value=""
+                placeholder="optional"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- Execution Output Card -->
+        <div class="card">
+          <div class="card-header">
+            <svg
+              class="card-icon"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <polyline points="4 17 10 11 4 5" />
+              <line x1="12" y1="19" x2="20" y2="19" />
+            </svg>
+            <h3>Execution Output</h3>
+            <span class="output-lines" id="lineCount">0 lines</span>
+            <div class="output-actions">
+              <button
+                class="action-btn"
+                id="copyOutputBtn"
+                title="Copy output"
+                aria-label="Copy output"
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path
+                    d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"
+                  />
+                  <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+                </svg>
+              </button>
+              <button
+                class="action-btn"
+                id="clearOutputBtn"
+                title="Clear output"
+                aria-label="Clear output"
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <polyline points="3 6 5 4 21 4" />
+                  <path d="M19 4v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4" />
+                  <line x1="8" y1="4" x2="8" y2="20" />
+                  <line x1="12" y1="4" x2="12" y2="20" />
+                  <line x1="16" y1="4" x2="16" y2="20" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="terminal" id="terminal">
+            <div class="terminal-line">$ waiting for commands...</div>
+          </div>
+        </div>
+      </main>
     </div>
 
     <script src="theme.js"></script>
     <script src="setup-event-listeners.js"></script>
-</body>
+  </body>
 </html>

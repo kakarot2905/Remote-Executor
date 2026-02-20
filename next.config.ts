@@ -9,6 +9,9 @@ const mask = (value: string | undefined, visible: number = 4) => {
 
 const nextConfig: NextConfig = {
   /* config options here */
+  experimental: {
+    middlewareClientMaxBodySize: "50mb",
+  },
   async headers() {
     return [
       {

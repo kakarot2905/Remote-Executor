@@ -11,6 +11,9 @@ const statusText = document.getElementById('statusText');
 const workerIdDisplay = document.getElementById('workerIdDisplay');
 const activeJobsDisplay = document.getElementById('activeJobsDisplay');
 const workerStatusText = document.getElementById('workerStatusText');
+const cpuUsageDisplay = document.getElementById('cpuUsageDisplay');
+const memUsageDisplay = document.getElementById('memUsageDisplay');
+const containerCountDisplay = document.getElementById('containerCountDisplay');
 
 const startBtn = document.getElementById('startBtn');
 const stopBtn = document.getElementById('stopBtn');
@@ -21,13 +24,31 @@ const lineCount = document.getElementById('lineCount');
 
 const serverUrlInput = document.getElementById('serverUrl');
 const workerIdInput = document.getElementById('workerId');
-const maxJobsInput = document.getElementById('maxJobs');
+const hostnameInput = document.getElementById('hostname');
+const maxParallelJobsInput = document.getElementById('maxParallelJobs');
+const enableDockerInput = document.getElementById('enableDocker');
+const dockerNetworkModeInput = document.getElementById('dockerNetworkMode');
+const dockerTimeoutInput = document.getElementById('dockerTimeout');
+const dockerMemoryLimitInput = document.getElementById('dockerMemoryLimit');
+const dockerCpuLimitInput = document.getElementById('dockerCpuLimit');
+const dockerTmpfsMbInput = document.getElementById('dockerTmpfsMb');
+const workerTokenSecretInput = document.getElementById('workerTokenSecret');
+const vercelBypassTokenInput = document.getElementById('vercelBypassToken');
 
 function getConfigFromForm() {
     return {
         serverUrl: serverUrlInput?.value.trim() || '',
         workerId: workerIdInput?.value.trim() || '',
-        maxParallelJobs: maxJobsInput?.value || '0',
+        hostname: hostnameInput?.value.trim() || '',
+        maxParallelJobs: maxParallelJobsInput?.value || '0',
+        enableDocker: enableDockerInput?.checked !== false,
+        dockerNetworkMode: dockerNetworkModeInput?.value || 'none',
+        dockerTimeout: dockerTimeoutInput?.value || '300000',
+        dockerMemoryLimit: dockerMemoryLimitInput?.value.trim() || '512m',
+        dockerCpuLimit: dockerCpuLimitInput?.value.trim() || '2.0',
+        dockerTmpfsMb: dockerTmpfsMbInput?.value || '1024',
+        workerTokenSecret: workerTokenSecretInput?.value || '',
+        vercelBypassToken: vercelBypassTokenInput?.value || '',
     };
 }
 
@@ -58,8 +79,27 @@ function updateWorkerInfo() {
         workerIdDisplay.textContent = workerIdInput?.value.trim() || 'worker-001';
     }
     if (activeJobsDisplay) {
-        const maxJobs = maxJobsInput?.value || '0';
+        const maxJobs = maxParallelJobsInput?.value || '0';
         activeJobsDisplay.textContent = `0/${maxJobs}`;
+    }
+}
+
+async function updateResourceMetrics() {
+    if (!window.electronAPI?.getDockerStats) return;
+
+    try {
+        const stats = await window.electronAPI.getDockerStats();
+        if (cpuUsageDisplay) {
+            cpuUsageDisplay.textContent = `${(stats.cpuUsage || 0).toFixed(1)}%`;
+        }
+        if (memUsageDisplay) {
+            memUsageDisplay.textContent = `${stats.memoryMb || 0} MB`;
+        }
+        if (containerCountDisplay) {
+            containerCountDisplay.textContent = `${stats.containerCount || 0}`;
+        }
+    } catch (error) {
+        console.error('[UI] Failed to fetch Docker stats:', error);
     }
 }
 
@@ -89,6 +129,10 @@ function appendOutput(text, type = 'stdout') {
 
 async function startWorker() {
     const config = getConfigFromForm();
+
+    // Debug: Log the dockerTimeout value from form
+    console.log('[UI] Docker Timeout from form:', config.dockerTimeout);
+    console.log('[UI] Full config:', config);
 
     if (!config.serverUrl) {
         appendOutput('[ERROR] Server URL is required', 'error');
@@ -176,7 +220,10 @@ function attachEventListeners() {
     copyOutputBtn?.addEventListener('click', copyOutput);
 
     workerIdInput?.addEventListener('input', updateWorkerInfo);
-    maxJobsInput?.addEventListener('input', updateWorkerInfo);
+    maxParallelJobsInput?.addEventListener('input', updateWorkerInfo);
+
+    // Poll resource metrics every 2 seconds
+    setInterval(updateResourceMetrics, 2000);
 
     if (window.electronAPI) {
         window.electronAPI.onWorkerOutput?.((data) => appendOutput(data.text, data.type || 'stdout'));
@@ -195,4 +242,5 @@ document.addEventListener('DOMContentLoaded', async () => {
     attachEventListeners();
     updateWorkerInfo();
     await refreshWorkerStatus();
+    await updateResourceMetrics();
 });

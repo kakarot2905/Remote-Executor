@@ -46,7 +46,7 @@ function parseWorkerHeartbeat(data) {
                 lastUpdated: Date.now()
             };
             workerStats = newStats;
-            console.log('[STATS PARSED]', newStats);
+            // console.log('[STATS PARSED]', newStats);
         }
     }
 }
@@ -133,6 +133,10 @@ ipcMain.handle('start-worker', async (event, config) => {
         const workerPath = getWorkerAgentPath();
         const args = ['--server', config.serverUrl];
 
+        // Debug: Log the dockerTimeout value received from UI
+        console.log('[MAIN] Received dockerTimeout from UI:', config.dockerTimeout);
+        console.log('[MAIN] Full config:', JSON.stringify(config, null, 2));
+
         // Set environment variables
         const env = {
             ...process.env,
@@ -142,8 +146,15 @@ ipcMain.handle('start-worker', async (event, config) => {
             DOCKER_MEMORY_LIMIT: config.dockerMemoryLimit || '512m',
             DOCKER_CPU_LIMIT: config.dockerCpuLimit || '2.0',
             ENABLE_DOCKER: config.enableDocker ? 'true' : 'false',
+            DOCKER_NETWORK_MODE: config.dockerNetworkMode || 'none',
+            DOCKER_TMPFS_MB: config.dockerTmpfsMb || '1024',
             MAX_PARALLEL_JOBS: config.maxParallelJobs || '0',
+            WORKER_TOKEN_SECRET: config.workerTokenSecret || undefined,
+            VERCEL_BYPASS_TOKEN: config.vercelBypassToken || undefined,
         };
+
+        // Debug: Log the final DOCKER_TIMEOUT env var
+        console.log('[MAIN] Setting DOCKER_TIMEOUT env var to:', env.DOCKER_TIMEOUT);
 
         try {
             workerProcess = spawn('node', [workerPath, ...args], {
@@ -279,7 +290,11 @@ ipcMain.handle('load-config', async () => {
                 dockerMemoryLimit: '512m',
                 dockerCpuLimit: '2.0',
                 enableDocker: true,
+                dockerNetworkMode: 'none',
+                dockerTmpfsMb: '1024',
                 maxParallelJobs: '0',
+                workerTokenSecret: '',
+                vercelBypassToken: '',
             },
         };
     }

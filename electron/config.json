@@ -2,9 +2,13 @@
   "serverUrl": "http://localhost:3000/",
   "workerId": "",
   "hostname": "",
-  "dockerTimeout": "300000",
+  "dockerTimeout": "300000000",
   "dockerMemoryLimit": "512m",
   "dockerCpuLimit": "2.0",
   "enableDocker": true,
-  "maxParallelJobs": "0"
+  "dockerNetworkMode": "none",
+  "dockerTmpfsMb": "1024",
+  "maxParallelJobs": "0",
+  "workerTokenSecret": "",
+  "vercelBypassToken": ""
 }
